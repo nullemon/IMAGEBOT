@@ -1,0 +1,33 @@
+# ---- IMAGEBOT ----
+# Secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local config that may contain branding/private values
+config.yaml
+config.local.yaml
+
+# Generated output (don't commit rendered cards / downloaded art)
+output/
+cache/
+samples/_generated/
+*.tmp
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

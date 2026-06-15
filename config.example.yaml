@@ -1,0 +1,33 @@
+# =========================================================================
+# IMAGEBOT branding / layout defaults.
+# Copy to "config.yaml" to customize. All fields are optional — anything you
+# omit uses the built-in default. The web UI can override most of these
+# per-render, so you only need this file to change the *defaults*.
+# =========================================================================
+
+brand:
+  # Right-side event wordmark, like "ANIME EXPO" in the reference cards.
+  event_name: "ANIME EXPO"
+  event_badge: "AX"            # small square badge before the wordmark
+  # Center watermark. Set to "" to disable.
+  watermark: "ANIME INSIDER"
+  # Default accent colour for the tag pills (hex). Each panel can override.
+  accent: "#F5A623"
+  # Secondary tag text shown by default (right pill).
+  default_tag_sub: "NEW INFO"
+
+card:
+  width: 1080            # Instagram portrait 4:5 -> 1080 x 1350
+  height: 1350
+  panels_per_card: 4     # how many series stacked per image
+  divider: true          # thin line between panels
+
+# Colour themes used for the background gradient when no art is found,
+# and as accents. Pick is automatic (by series name) unless a panel sets one.
+themes:
+  gold:    { top: "#3a2a12", bottom: "#7a5a22", accent: "#F5A623" }
+  navy:    { top: "#0b1a2e", bottom: "#16395e", accent: "#3FA7FF" }
+  crimson: { top: "#2a0b10", bottom: "#7a1422", accent: "#FF4D5E" }
+  violet:  { top: "#1c0f2e", bottom: "#43286e", accent: "#B07CFF" }
+  forest:  { top: "#0e2018", bottom: "#1f4a33", accent: "#48D08A" }
+  slate:   { top: "#14181d", bottom: "#2b333d", accent: "#9AA7B4" }

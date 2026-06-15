@@ -1,0 +1,16 @@
+# ---- Core (required) ----
+Pillow>=10.0          # image compositing engine
+Flask>=3.0            # local web UI
+requests>=2.31        # downloading art + provider REST calls
+python-dotenv>=1.0    # load API keys from .env
+PyYAML>=6.0           # optional branding config (config.yaml)
+beautifulsoup4>=4.12  # HTML fallback for image scraping
+
+# ---- Image search (keyless default) ----
+ddgs>=6.0             # DuckDuckGo image search (no API key needed)
+
+# ---- AI providers (optional — install the ones you have keys for) ----
+# The app runs without these; they're only imported when you enable a provider.
+anthropic>=0.40       # Claude  (news parsing, captions, best-image picking)
+openai>=1.40          # ChatGPT (+ used for Grok/xAI via OpenAI-compatible API)
+google-genai>=1.0     # Gemini  (parsing, captions, image generation)

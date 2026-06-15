@@ -1,0 +1,75 @@
+:root{
+  --bg:#0c0d12; --panel:#15171f; --panel2:#1d2030; --line:#2a2e3f;
+  --text:#e8eaf0; --muted:#9aa3b8; --accent:#f5a623; --accent2:#5b8cff;
+  --ok:#3ad08a; --warn:#ffb020; --danger:#ff5566;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1a1430 0,var(--bg) 55%);
+  color:var(--text);font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+h2{font-size:1rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:.2rem 0 1rem}
+h3{margin:.2rem 0}
+code{background:#0008;padding:1px 6px;border-radius:5px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;
+  background:#0c0d12dd;backdrop-filter:blur(8px);z-index:5}
+.brand{font-weight:800;letter-spacing:.12em}
+.brand .logo{color:var(--accent)}
+.status-pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:.72rem;padding:4px 10px;border-radius:999px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--muted)}
+.pill.ok{color:var(--ok);border-color:#1f5e43}
+.pill.warn{color:var(--warn);border-color:#5e4a1f}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:22px;max-width:1280px;margin:0 auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}
+.panel.wide{max-width:1280px;margin:0 auto 26px;width:calc(100% - 44px)}
+@media(max-width:920px){.grid{grid-template-columns:1fr}}
+
+textarea,input,select{width:100%;background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit}
+textarea{resize:vertical}
+label{display:block;font-size:.78rem;color:var(--muted);margin:0}
+label input,label select{margin-top:5px}
+
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.opts label:first-child{grid-column:1/-1}
+.checks{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0 16px}
+.checks label{display:flex;align-items:center;gap:7px;color:var(--text);font-size:.85rem}
+.checks input{width:auto;margin:0}
+
+button{cursor:pointer;border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:600}
+button.primary{background:linear-gradient(135deg,var(--accent),#ff7a59);color:#1a1205;width:100%}
+button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+  width:auto;padding:8px 13px;font-weight:500}
+button.ghost.danger{color:var(--danger)}
+button:disabled{opacity:.5;cursor:wait}
+
+.status{margin-top:14px;font-size:.82rem;color:var(--muted);white-space:pre-wrap;
+  background:#0009;border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:160px;overflow:auto}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid #fff3;
+  border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.empty{color:var(--muted);border:1px dashed var(--line);border-radius:12px;padding:34px;text-align:center}
+.cards{display:flex;flex-direction:column;gap:14px}
+.card-item img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
+.card-item .dl{display:inline-block;margin-top:8px}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.warnings{color:var(--warn);font-size:.8rem;margin:8px 0;list-style:none;padding-left:0}
+.warnings li::before{content:"⚠ "}
+
+.hint{color:var(--muted);font-size:.82rem;margin:.2rem 0 1rem}
+.panels{display:flex;flex-direction:column;gap:12px}
+.prow{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.prow-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+.prow-art{display:flex;gap:10px;align-items:end;margin-top:10px;flex-wrap:wrap}
+.prow-art .grow{flex:1;min-width:180px}
+.prow-art .upload{flex:0 0 auto}
+.prow-art .upload input{width:auto}
+.art-state{font-size:.74rem;color:var(--ok);align-self:center}
+.prow-art .remove{margin-left:auto;align-self:center}
+@media(max-width:780px){.prow-grid{grid-template-columns:repeat(2,1fr)}}
+
+.foot{color:var(--muted);font-size:.78rem;text-align:center;padding:18px}
+.hidden{display:none}
