@@ -207,8 +207,10 @@ def _accent(panel, spec, theme, style: Style, art) -> tuple[int, int, int]:
         return hex_to_rgb(panel.accent)
     if style.accent_mode == "fixed" and style.accent:
         return hex_to_rgb(style.accent)
-    if style.accent_mode == "series" and art is not None:
-        return vibrant_color(art, hex_to_rgb(theme.get("accent", spec.brand.accent)))
+    # otherwise pull a proper, vivid accent straight from the key visual
+    if art is not None and style.accent_mode in ("series", "auto", "theme"):
+        from . import palette
+        return palette.accent_of(art, hex_to_rgb(theme.get("accent", spec.brand.accent)))
     return hex_to_rgb(theme.get("accent") or spec.brand.accent)
 
 

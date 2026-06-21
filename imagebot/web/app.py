@@ -1,8 +1,8 @@
-"""Flask app: paste news -> one card -> switch templates instantly -> download.
+"""Flask app: news -> one card -> switch templates instantly -> download.
 
-The heavy work (parse + find art) happens once in /generate, which renders just
-the default template. Switching templates calls /render_one, which re-composites
-the *same* resolved panels into another style on the fly — no re-search.
+Supports two modes (line-up lists / single-story news posts) and multi-account
+branding: pick up to 4 handles and each render comes out stamped with that
+account's @username.
 """
 from __future__ import annotations
 
@@ -16,8 +16,9 @@ from flask import (Flask, jsonify, render_template, request,
 from ..config import get_settings
 from ..image_search import CACHE_DIR
 from ..models import Panel, NewsPost
-from ..pipeline import (GenerateOptions, make_variants, build_carousel, render_one,
-                        make_news_post, render_news_one, render_news_from_post)
+from ..pipeline import (GenerateOptions, build_carousel, render_one,
+                        prepare_lineup, prepare_news, render_news_one,
+                        render_news_from_post)
 from ..styles import all_styles
 from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
 from .. import logos
@@ -25,6 +26,7 @@ from .. import logos
 ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_STYLE = all_styles()[0].key
 NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
+_STYLE_NAME = {s.key: s.name for s in all_styles()}
 
 
 def _bool(v, default=False):
@@ -50,6 +52,7 @@ def _opts_from(data: dict) -> GenerateOptions:
         find_logo=_bool(data.get("find_logo"), False),
         write_caption=_bool(data.get("write_caption"), True),
         cover_title=data.get("cover_title") or "LINE-UP",
+        accounts=data.get("accounts") or [],
     )
 
 
@@ -68,41 +71,37 @@ def create_app(settings=None) -> Flask:
                 continue
         return ""
 
-    def styles_list():
-        return [{"key": s.key, "name": s.name, "layout": s.layout} for s in all_styles()]
+    def outputs_urls(outputs):
+        return [{"account": o["account"], "cards": [file_url(c) for c in o["cards"]]}
+                for o in outputs]
 
-    def gen_json(res, current_key):
-        cur = next((v for v in res.variants if v["key"] == current_key),
-                   res.variants[0] if res.variants else None)
-        return {
-            "ok": True, "runid": res.runid, "provider_used": res.provider_used,
-            "panels": [p.to_dict() for p in res.panels],
-            "styles": styles_list(),
-            "current": ({"key": cur["key"], "name": cur["name"],
-                         "cards": [file_url(c) for c in cur["cards"]]} if cur else None),
-            "caption": res.caption, "warnings": res.warnings, "log": res.log,
-            "capabilities": res.capabilities,
-        }
-
-    def news_json(res):
-        cur = res.current
-        return {
-            "ok": True, "mode": "news", "runid": res.runid,
-            "provider_used": res.provider_used,
-            "post": res.post.to_dict(),
-            "styles": news_templates(),
-            "current": ({"key": cur["key"], "name": cur["name"],
-                         "cards": [file_url(c) for c in cur["cards"]]} if cur else None),
-            "caption": res.caption, "warnings": res.warnings, "log": res.log,
-            "capabilities": res.capabilities,
-        }
-
-    def _capabilities():
+    def _caps():
         try:
             from .. import enhance
             return enhance.capabilities()
         except Exception:
             return {}
+
+    def lineup_payload(runid, prep, current_key, outputs, log):
+        return {
+            "ok": True, "mode": "lineup", "runid": runid,
+            "provider_used": prep["provider_used"],
+            "panels": [p.to_dict() for p in prep["panels"]],
+            "styles": [{"key": s.key, "name": s.name} for s in all_styles()],
+            "current": {"key": current_key, "name": _STYLE_NAME.get(current_key, current_key),
+                        "outputs": outputs_urls(outputs)},
+            "caption": prep["caption"], "warnings": prep["warnings"],
+            "log": log, "capabilities": _caps(),
+        }
+
+    def news_payload(runid, post, current_key, outputs, provider_used, caption, warnings, log):
+        return {
+            "ok": True, "mode": "news", "runid": runid, "provider_used": provider_used,
+            "post": post.to_dict(), "styles": news_templates(),
+            "current": {"key": current_key, "name": NEWS_NAME.get(current_key, current_key),
+                        "outputs": outputs_urls(outputs)},
+            "caption": caption, "warnings": warnings, "log": log, "capabilities": _caps(),
+        }
 
     # ---- page -----------------------------------------------------------
     @app.get("/")
@@ -113,79 +112,84 @@ def create_app(settings=None) -> Flask:
             text_provider=settings.resolve_text_provider(),
             brand=settings.brand,
             themes=sorted((settings.themes or {}).keys()),
-            styles=styles_list(),
+            styles=[{"key": s.key, "name": s.name} for s in all_styles()],
+            accounts=settings.accounts or [],
             search_keyed=bool(settings.serpapi_key or (settings.google_api_key and settings.google_cse_id)),
             sd=bool(settings.sd_url),
-            caps=_capabilities(),
+            caps=_caps(),
         )
 
-    # ---- generate (parse + art + render default template once) ----------
+    # ---- generate (parse + art once + render default template) ----------
     @app.post("/generate")
     def generate():
         data = request.get_json(silent=True) or request.form.to_dict()
         news = (data.get("news") or "").strip()
         if not news:
             return jsonify(ok=False, error="Please paste some news text."), 400
+        opts = _opts_from(data)
+        runid = time.strftime("%Y%m%d-%H%M%S")
         log: list[str] = []
         if data.get("mode") == "news":
+            prep = prepare_news(settings, opts, news, progress=log.append)
+            if not prep["post"].headline:
+                return jsonify(ok=False, error="Couldn't read a headline."), 400
             current = data.get("style") or DEFAULT_NEWS
-            res = make_news_post(news, settings, _opts_from(data),
-                                 template_key=current, progress=log.append)
-            res.log = log
-            return jsonify(news_json(res))
+            outputs = render_news_one(prep["post"], settings, opts, current, runid)
+            return jsonify(news_payload(runid, prep["post"], current, outputs,
+                                        prep["provider_used"], prep["caption"], prep["warnings"], log))
+        prep = prepare_lineup(settings, opts, news=news, progress=log.append)
+        if not prep["panels"]:
+            return jsonify(ok=False, error="No panels could be parsed."), 400
         current = data.get("style") or DEFAULT_STYLE
-        opts = _opts_from(data)
-        opts.styles = [current]
-        res = make_variants(settings, opts, news=news, progress=log.append)
-        res.log = log
-        return jsonify(gen_json(res, current))
+        outputs = render_one(prep["panels"], settings, opts, current, runid)
+        return jsonify(lineup_payload(runid, prep, current, outputs, log))
 
-    # ---- re-render current template with edited fields (+ re-find art) ---
+    # ---- re-render current template with edits (+ re-find art) ----------
     @app.post("/render")
     def render():
         data = request.get_json(silent=True) or {}
+        opts = _opts_from(data)
+        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        log: list[str] = []
         if data.get("mode") == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:
                 return jsonify(ok=False, error="No headline."), 400
-            runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
-            style = data.get("style") or DEFAULT_NEWS
-            res = render_news_from_post(post, settings, _opts_from(data), runid, style)
-            return jsonify(news_json(res))
+            current = data.get("style") or DEFAULT_NEWS
+            res = render_news_from_post(post, settings, opts, runid, current)
+            return jsonify(news_payload(runid, res.post, current, res.current["outputs"],
+                                        res.provider_used, "", res.warnings, log))
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         if not panels:
             return jsonify(ok=False, error="No panels to render."), 400
+        prep = prepare_lineup(settings, opts, panels=panels, progress=log.append)
         current = data.get("style") or DEFAULT_STYLE
-        opts = _opts_from(data)
-        opts.styles = [current]
-        log: list[str] = []
-        res = make_variants(settings, opts, panels=panels, progress=log.append)
-        res.log = log
-        return jsonify(gen_json(res, current))
+        outputs = render_one(prep["panels"], settings, opts, current, runid)
+        return jsonify(lineup_payload(runid, prep, current, outputs, log))
 
     # ---- instant template switch (no re-search) -------------------------
     @app.post("/render_one")
     def render_one_route():
         data = request.get_json(silent=True) or {}
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        opts = _opts_from(data)
         if data.get("mode") == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:
                 return jsonify(ok=False, error="Nothing to render."), 400
             style = data.get("style") or DEFAULT_NEWS
-            cards = render_news_one(post, settings, _opts_from(data), style, runid)
+            outputs = render_news_one(post, settings, opts, style, runid)
             return jsonify(ok=True, mode="news", key=style, name=NEWS_NAME.get(style, style),
-                           runid=runid, cards=[file_url(c) for c in cards])
+                           runid=runid, outputs=outputs_urls(outputs))
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
-        style = data.get("style") or DEFAULT_STYLE
         if not panels:
             return jsonify(ok=False, error="Nothing to render."), 400
-        cards = render_one(panels, settings, _opts_from(data), style, runid)
-        name = next((s.name for s in all_styles() if s.key == style), style)
-        return jsonify(ok=True, key=style, name=name, runid=runid,
-                       cards=[file_url(c) for c in cards])
+        style = data.get("style") or DEFAULT_STYLE
+        outputs = render_one(panels, settings, opts, style, runid)
+        return jsonify(ok=True, mode="lineup", key=style, name=_STYLE_NAME.get(style, style),
+                       runid=runid, outputs=outputs_urls(outputs))
 
-    # ---- carousel zip for the selected template -------------------------
+    # ---- carousel zip (line-up) -----------------------------------------
     @app.post("/carousel")
     def carousel():
         data = request.get_json(silent=True) or {}
@@ -196,8 +200,7 @@ def create_app(settings=None) -> Flask:
             return jsonify(ok=False, error="No panels."), 400
         out = build_carousel(panels, settings, _opts_from(data), style_key, runid,
                              with_cover=_bool(data.get("cover"), True))
-        return jsonify(ok=True, cards=[file_url(c) for c in out["cards"]],
-                       zip=file_url(out["zip"]))
+        return jsonify(ok=True, cards=[file_url(c) for c in out["cards"]], zip=file_url(out["zip"]))
 
     # ---- uploads / logos ------------------------------------------------
     @app.post("/upload")
@@ -241,7 +244,7 @@ def create_app(settings=None) -> Flask:
             return jsonify(ok=False, error="No clean logo found — try uploading one.")
         return jsonify(ok=True, logo_path=path, url=file_url(path))
 
-    # ---- file serving + misc -------------------------------------------
+    # ---- misc -----------------------------------------------------------
     @app.get("/file/<path:relpath>")
     def serve_file(relpath):
         which = request.args.get("d", "output")
@@ -252,8 +255,7 @@ def create_app(settings=None) -> Flask:
 
     @app.get("/capabilities")
     def capabilities():
-        return jsonify(ok=True, capabilities=_capabilities(),
-                       providers=settings.available_text_providers())
+        return jsonify(ok=True, capabilities=_caps(), providers=settings.available_text_providers())
 
     @app.get("/health")
     def health():

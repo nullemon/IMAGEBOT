@@ -59,6 +59,16 @@ Solo Leveling Season 3 — July 4"></textarea>
           <label><input type="checkbox" id="ai_fallback" /> AI-generate if none</label>
           <label><input type="checkbox" id="write_caption" checked /> Write caption</label>
         </div>
+        <div class="accounts">
+          <div class="muted">Post as — pick up to 4 handles (each render gets that @username):</div>
+          <div class="acc-list">
+            {% for a in accounts %}
+            <label class="chip-check"><input type="checkbox" class="acc" value="{{ a.handle }}"
+              data-wm="{{ a.watermark or '' }}" data-event="{{ a.event_name or '' }}" /> {{ a.handle or a.name }}</label>
+            {% endfor %}
+          </div>
+          <input id="acc-extra" type="text" placeholder="+ add handles: @page1, @page2" />
+        </div>
         <button id="generate" class="primary">✦ Make my card</button>
       </div>
     </div>

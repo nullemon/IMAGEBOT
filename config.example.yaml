@@ -5,6 +5,14 @@
 # per-render, so you only need this file to change the *defaults*.
 # =========================================================================
 
+# Social accounts you run. In the web UI you pick up to 4 per generate and each
+# render comes out stamped with that account's @handle + watermark.
+accounts:
+  - {name: "Anime Insider", handle: "@animeinsider", watermark: "ANIME INSIDER"}
+  - {name: "Anime News",    handle: "@animenews",    watermark: "ANIME NEWS"}
+  - {name: "Otaku Daily",   handle: "@otakudaily",   watermark: "OTAKU DAILY"}
+  - {name: "Manga Hub",     handle: "@mangahub",     watermark: "MANGA HUB"}
+
 brand:
   # Right-side event wordmark, like "ANIME EXPO" in the reference cards.
   event_name: "ANIME EXPO"

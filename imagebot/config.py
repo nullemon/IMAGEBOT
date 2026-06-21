@@ -5,7 +5,7 @@ Everything has a default so the app runs with no .env and no config.yaml.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .models import BrandConfig, CardSpec
@@ -64,6 +64,7 @@ class Settings:
     # branding + layout
     brand: BrandConfig = field(default_factory=BrandConfig)
     themes: dict = field(default_factory=lambda: dict(DEFAULT_THEMES))
+    accounts: list = field(default_factory=list)   # [{name, handle, watermark, event_name, event_badge, accent}]
     card_width: int = 1080
     card_height: int = 1350
     panels_per_card: int = 4
@@ -99,7 +100,7 @@ class Settings:
             height=self.card_height,
             panels_per_card=self.panels_per_card,
             divider=self.divider,
-            brand=self.brand,
+            brand=replace(self.brand),     # a fresh copy so per-account edits don't leak
             themes=self.themes,
         )
         for k, v in overrides.items():
@@ -162,6 +163,8 @@ def load_settings() -> Settings:
     s.divider = bool(card.get("divider", s.divider))
     if isinstance(cfg, dict) and cfg.get("themes"):
         s.themes = {**DEFAULT_THEMES, **cfg["themes"]}
+    if isinstance(cfg, dict) and isinstance(cfg.get("accounts"), list):
+        s.accounts = cfg["accounts"]
 
     return s
 

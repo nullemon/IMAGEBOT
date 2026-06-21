@@ -455,9 +455,13 @@ def render_news(post: NewsPost, template_key: str, spec: CardSpec,
     W, H = spec.width, spec.height
     theme = _theme_for(post, spec)
     art = _open_art(post)
-    accent = (hex_to_rgb(post.accent) if post.accent
-              else (vibrant_color(art, hex_to_rgb(theme.get("accent", spec.brand.accent)))
-                    if art is not None else hex_to_rgb(theme.get("accent", spec.brand.accent))))
+    if post.accent:
+        accent = hex_to_rgb(post.accent)
+    elif art is not None:
+        from . import palette
+        accent = palette.accent_of(art, hex_to_rgb(theme.get("accent", spec.brand.accent)))
+    else:
+        accent = hex_to_rgb(theme.get("accent", spec.brand.accent))
 
     name, fn = _NEWS_BY_KEY.get(template_key, _NEWS_BY_KEY[DEFAULT_NEWS])
 

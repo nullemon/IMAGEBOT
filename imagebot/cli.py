@@ -84,12 +84,12 @@ def _cmd_news(args) -> int:
     for w in res.warnings:
         print("  ⚠", w)
     if res.current:
-        print("Post:", res.current["cards"][0])
+        print("Post:", res.current["outputs"][0]["cards"][0])
     if args.all_templates:
         print("\nAll templates:")
         for k, n, _ in NEWS_TEMPLATES:
-            p = render_news_one(res.post, settings, opts, k, res.runid)
-            print(f"  → {n:16} {p[0]}")
+            outs = render_news_one(res.post, settings, opts, k, res.runid)
+            print(f"  → {n:16} {outs[0]['cards'][0]}")
     if res.caption:
         print("\nCaption:\n" + res.caption)
     return 0

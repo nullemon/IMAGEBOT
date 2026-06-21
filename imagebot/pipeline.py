@@ -37,6 +37,8 @@ class GenerateOptions:
     ai_fallback: bool = False           # generate art when none found (cloud or local SD)
     # logos
     find_logo: bool = False             # auto search+download a transparent logo
+    # accounts — render the post once per handle (max 4), each branded with its @username
+    accounts: list = field(default_factory=list)   # [{handle, watermark, event_name, event_badge, accent}]
     # output
     styles: list[str] | None = None     # which style keys to render (None = all)
     write_caption: bool = True
@@ -126,6 +128,37 @@ def _apply_brand(spec, opts):
         spec.brand.watermark = opts.watermark
     if opts.event_name:
         spec.brand.event_name = opts.event_name
+    return spec
+
+
+def _slug(text: str) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "default"
+
+
+def account_brands(opts: "GenerateOptions", settings) -> list[dict]:
+    """One brand override per selected account (≤4), or a single default brand."""
+    accs = opts.accounts or []
+    if not accs:
+        return [{"handle": "",
+                 "watermark": (opts.watermark if opts.watermark is not None else settings.brand.watermark),
+                 "event_name": opts.event_name or settings.brand.event_name,
+                 "event_badge": settings.brand.event_badge, "accent": ""}]
+    out = []
+    for a in accs[:4]:
+        h = (a.get("handle") or "").strip()
+        wm = a.get("watermark") or (h.lstrip("@").upper() if h else settings.brand.watermark)
+        out.append({"handle": h, "watermark": wm,
+                    "event_name": a.get("event_name") or opts.event_name or settings.brand.event_name,
+                    "event_badge": a.get("event_badge") or settings.brand.event_badge,
+                    "accent": a.get("accent") or ""})
+    return out
+
+
+def _apply_account(spec, b):
+    spec.brand.watermark = b["watermark"]
+    spec.brand.event_name = b["event_name"]
+    spec.brand.event_badge = b["event_badge"]
     return spec
 
 
@@ -220,10 +253,11 @@ def build_carousel(panels: list[Panel], settings, opts: GenerateOptions,
     """Render the chosen style's cards (+ optional cover) and zip them."""
     opts = opts or GenerateOptions()
     style = get_style(style_key)
+    b = account_brands(opts, settings)[0]
     spec = settings.card_spec(panels_per_card=opts.panels_per_card)
     spec.style = style
-    _apply_brand(spec, opts)
-    out_dir = Path(settings.output_dir) / runid / style.key
+    _apply_account(spec, b)
+    out_dir = Path(settings.output_dir) / runid / style.key / _slug(b["handle"] or b["watermark"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
     paths = save_cards(render_cards(panels, spec, _FONTS), str(out_dir), prefix="card")
@@ -241,16 +275,42 @@ def build_carousel(panels: list[Panel], settings, opts: GenerateOptions,
 
 
 def render_one(panels: list[Panel], settings, opts: GenerateOptions | None,
-               style_key: str, runid: str) -> list[str]:
+               style_key: str, runid: str) -> list[dict]:
     """Render ONE style for already-resolved panels — fast, no art search.
-    Used by the web UI to swap templates instantly."""
+    Returns one output per account: [{account, cards:[...]}]."""
     opts = opts or GenerateOptions()
     style = get_style(style_key)
-    spec = settings.card_spec(panels_per_card=opts.panels_per_card)
-    spec.style = style
-    _apply_brand(spec, opts)
-    return save_cards(render_cards(panels, spec, _FONTS),
-                      f"{settings.output_dir}/{runid}/{style.key}", prefix="card")
+    outputs = []
+    for b in account_brands(opts, settings):
+        spec = settings.card_spec(panels_per_card=opts.panels_per_card)
+        spec.style = style
+        _apply_account(spec, b)
+        sub = _slug(b["handle"] or b["watermark"])
+        cards = save_cards(render_cards(panels, spec, _FONTS),
+                           f"{settings.output_dir}/{runid}/{style.key}/{sub}", prefix="card")
+        outputs.append({"account": b["handle"] or b["watermark"] or "", "cards": cards})
+    return outputs
+
+
+def prepare_lineup(settings, opts: GenerateOptions, news: str | None = None,
+                   panels: list[Panel] | None = None, progress=None) -> dict:
+    """Parse + resolve art/logos + caption once (no rendering)."""
+    prov = get_text_provider(settings, opts.provider)
+    pu = getattr(prov, "name", "none")
+    if panels is None:
+        if progress:
+            progress(f"parsing news (provider: {pu})")
+        panels = parse_news(news or "", settings, provider=prov, max_panels=opts.max_panels,
+                            default_tag_sub=settings.brand.default_tag_sub)
+    if not panels:
+        return {"panels": [], "warnings": ["No panels could be parsed."], "provider_used": pu, "caption": ""}
+    if opts.date_text:
+        for p in panels:
+            if not p.date_text:
+                p.date_text = opts.date_text
+    warnings = resolve_art(panels, settings, opts, provider=prov, progress=progress)
+    caption = write_caption(panels, settings, opts, provider=prov) if opts.write_caption else ""
+    return {"panels": panels, "warnings": warnings, "provider_used": pu, "caption": caption}
 
 
 # ==========================================================================
@@ -314,13 +374,39 @@ def _resolve_post_art(post: NewsPost, settings, opts: GenerateOptions, provider,
 
 
 def render_news_one(post: NewsPost, settings, opts: GenerateOptions | None,
-                    template_key: str, runid: str) -> list[str]:
-    """Render ONE news template for an already-resolved post (instant switch)."""
+                    template_key: str, runid: str) -> list[dict]:
+    """Render ONE news template for a resolved post — one output per account,
+    each stamped with that account's @handle. [{account, cards:[...]}]."""
     opts = opts or GenerateOptions()
-    spec = settings.card_spec()
-    _apply_brand(spec, opts)
-    card = render_news(post, template_key, spec, _FONTS)
-    return save_news(card, f"{settings.output_dir}/{runid}/news_{template_key}", prefix="post")
+    outputs = []
+    for b in account_brands(opts, settings):
+        spec = settings.card_spec()
+        _apply_account(spec, b)
+        p = NewsPost.from_dict(post.to_dict())
+        if b["handle"]:
+            p.source = b["handle"]
+        card = render_news(p, template_key, spec, _FONTS)
+        sub = _slug(b["handle"] or b["watermark"])
+        cards = save_news(card, f"{settings.output_dir}/{runid}/news_{template_key}/{sub}", prefix="post")
+        outputs.append({"account": b["handle"] or b["watermark"] or "", "cards": cards})
+    return outputs
+
+
+def prepare_news(settings, opts: GenerateOptions, news: str, progress=None) -> dict:
+    prov = get_text_provider(settings, opts.provider)
+    pu = getattr(prov, "name", "none")
+    if progress:
+        progress(f"parsing the story (provider: {pu})")
+    post = parse_news_post(news, settings, provider=prov)
+    if not post.headline:
+        return {"post": post, "warnings": ["Couldn't read a headline."], "provider_used": pu, "caption": ""}
+    if post.items and not post.body:
+        post.body = "\n".join(str(x) for x in post.items)
+    if opts.date_text and not post.date_text:
+        post.date_text = opts.date_text
+    warnings = _resolve_post_art(post, settings, opts, prov, progress)
+    caption = news_caption(post, settings, opts, provider=prov) if opts.write_caption else ""
+    return {"post": post, "warnings": warnings, "provider_used": pu, "caption": caption}
 
 
 def news_caption(post: NewsPost, settings, opts, provider=None) -> str:
@@ -337,29 +423,18 @@ def news_caption(post: NewsPost, settings, opts, provider=None) -> str:
 def make_news_post(news: str, settings, opts: GenerateOptions | None = None,
                    template_key: str | None = None, progress=None) -> NewsResult:
     opts = opts or GenerateOptions()
-    prov = get_text_provider(settings, opts.provider)
-    provider_used = getattr(prov, "name", "none")
-    if progress:
-        progress(f"parsing the story (provider: {provider_used})")
-    post = parse_news_post(news, settings, provider=prov)
+    prep = prepare_news(settings, opts, news, progress=progress)
+    post = prep["post"]
     if not post.headline:
-        return NewsResult(post=post, warnings=["Couldn't read a headline."],
-                          provider_used=provider_used)
-    if post.items and not post.body:          # surface list items in the editable body
-        post.body = "\n".join(str(x) for x in post.items)
-    if opts.date_text and not post.date_text:
-        post.date_text = opts.date_text
-
-    warnings = _resolve_post_art(post, settings, opts, prov, progress)
+        return NewsResult(post=post, warnings=prep["warnings"], provider_used=prep["provider_used"])
     runid = time.strftime("%Y%m%d-%H%M%S")
     key = template_key or DEFAULT_NEWS
     if progress:
         progress("rendering the post…")
-    cards = render_news_one(post, settings, opts, key, runid)
-    res = NewsResult(post=post, runid=runid, provider_used=provider_used, warnings=warnings,
-                     current={"key": key, "name": _NEWS_NAME.get(key, key), "cards": cards})
-    if opts.write_caption:
-        res.caption = news_caption(post, settings, opts, provider=prov)
+    outputs = render_news_one(post, settings, opts, key, runid)
+    res = NewsResult(post=post, runid=runid, provider_used=prep["provider_used"],
+                     warnings=prep["warnings"], caption=prep["caption"],
+                     current={"key": key, "name": _NEWS_NAME.get(key, key), "outputs": outputs})
     try:
         from . import enhance
         res.capabilities = enhance.capabilities()
@@ -373,10 +448,10 @@ def render_news_from_post(post: NewsPost, settings, opts: GenerateOptions, runid
     """Re-render a (possibly edited) post into a template — re-resolves art."""
     prov = get_text_provider(settings, opts.provider)
     warnings = _resolve_post_art(post, settings, opts, prov, None)
-    cards = render_news_one(post, settings, opts, template_key, runid)
+    outputs = render_news_one(post, settings, opts, template_key, runid)
     return NewsResult(post=post, runid=runid, warnings=warnings,
                       provider_used=getattr(prov, "name", "none"),
-                      current={"key": template_key, "name": _NEWS_NAME.get(template_key, template_key), "cards": cards})
+                      current={"key": template_key, "name": _NEWS_NAME.get(template_key, template_key), "outputs": outputs})
 
 
 # ---- single-style helpers (CLI / back-compat) ----------------------------

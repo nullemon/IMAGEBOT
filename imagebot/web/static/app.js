@@ -9,9 +9,19 @@ const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
 let STATE = { mode: "lineup", runid: "", styles: [], current: "" };
 
 const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || "lineup";
+function collectAccounts() {
+  const accs = [];
+  $$(".acc:checked").forEach((c) => accs.push({
+    handle: c.value, watermark: c.dataset.wm || "", event_name: c.dataset.event || "",
+  }));
+  ($("#acc-extra").value || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean)
+    .forEach((h) => accs.push({ handle: h.startsWith("@") ? h : "@" + h }));
+  return accs.slice(0, 4);
+}
 function options() {
   return {
     mode: mode(),
+    accounts: collectAccounts(),
     provider: $("#provider").value,
     panels_per_card: $("#panels_per_card").value,
     event_name: $("#event_name").value,
@@ -71,11 +81,13 @@ function showCurrent(d) {
   $("#preview-wrap").classList.remove("hidden");
   $("#cur-name").textContent = d.name;
   const pc = $("#preview-cards"); pc.innerHTML = "";
-  d.cards.forEach((src, i) => {
+  (d.outputs || []).forEach((o) => o.cards.forEach((src, i) => {
     const div = document.createElement("div"); div.className = "sel-card";
-    div.innerHTML = `<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${d.key}_${i + 1}.png">⬇ download</a>`;
+    const label = o.account ? `<div class="acc-label">${o.account}</div>` : "";
+    const name = (o.account || d.key).replace(/[^a-z0-9]/gi, "_");
+    div.innerHTML = `${label}<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${name}_${i + 1}.png">⬇ download</a>`;
     pc.appendChild(div);
-  });
+  }));
   markActive();
 }
 

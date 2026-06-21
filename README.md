@@ -6,7 +6,8 @@ a logo, status pills (`SEASON 4` · `NEW INFO`), the event wordmark, and a big
 date — plus an auto-written caption and one-click **carousel export**.
 
 Two modes: **line-up lists** (multi-series carousels) and **single-story news posts**
-(the format the big anime-news IG/FB pages use).
+(the format the big anime-news IG/FB pages use). Run several pages? Pick up to **4 of
+your handles** per generate and each render comes out stamped with that @username.
 
 Runs **locally**. On an Ubuntu box with a GPU it also does background cut-outs,
 AI upscaling, OCR watermark clean-up, and local Stable-Diffusion art.
@@ -33,6 +34,10 @@ Ticker, Poster, Date Stamp, Framed, and List/Ranking.
 
 ![news templates](samples/preview_news.png)
 
+Same story, two of your accounts (handle + colour auto-matched to the art):
+
+![accounts](samples/preview_accounts.png)
+
 ---
 
 ## What it does
@@ -56,9 +61,11 @@ ready-to-post PNGs (1080×1350) · caption · carousel .zip (with cover slide)
   date-sticker, diagonal, vertical, date-medallion, ticket-stub, ribbon, half-split,
   minimal, big-type, breaking, stack). Pick one and
   download, or export the whole carousel.
-- **Clean art, not clutter** — AI vision picks the best/cleanest key visual among
-  candidates; the GPU stack can cut the character out onto a designed background,
-  upscale low-res art, and OCR-detect + inpaint existing watermarks/text.
+- **Clean, colour-matched art** — AI vision picks the cleanest key visual; the
+  accent colour (pills/badges/date) is auto-pulled from the image; the GPU stack
+  can cut the character out, upscale low-res art, and inpaint existing watermarks.
+- **Multi-account** — pick up to 4 of your handles per generate; each render is
+  branded with that account's @username + watermark (configure in `config.yaml`).
 - **Official logos** — upload a transparent PNG per series (saved to a local
   library and reused), or auto search→download→save. Overlaid instead of text.
 - **Multiple AI providers** — Claude, ChatGPT, Gemini, Grok. Use one or all; with
