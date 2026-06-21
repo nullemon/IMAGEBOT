@@ -1,4 +1,9 @@
-"""Flask app: paste news -> gallery of style variants -> pick -> carousel/zip."""
+"""Flask app: paste news -> one card -> switch templates instantly -> download.
+
+The heavy work (parse + find art) happens once in /generate, which renders just
+the default template. Switching templates calls /render_one, which re-composites
+the *same* resolved panels into another style on the fly — no re-search.
+"""
 from __future__ import annotations
 
 import time
@@ -11,11 +16,12 @@ from flask import (Flask, jsonify, render_template, request,
 from ..config import get_settings
 from ..image_search import CACHE_DIR
 from ..models import Panel
-from ..pipeline import GenerateOptions, make_variants, build_carousel
+from ..pipeline import (GenerateOptions, make_variants, build_carousel, render_one)
 from ..styles import all_styles
 from .. import logos
 
 ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+DEFAULT_STYLE = all_styles()[0].key
 
 
 def _bool(v, default=False):
@@ -41,7 +47,6 @@ def _opts_from(data: dict) -> GenerateOptions:
         find_logo=_bool(data.get("find_logo"), False),
         write_caption=_bool(data.get("write_caption"), True),
         cover_title=data.get("cover_title") or "LINE-UP",
-        styles=data.get("styles") or None,
     )
 
 
@@ -60,13 +65,18 @@ def create_app(settings=None) -> Flask:
                 continue
         return ""
 
-    def result_json(res):
+    def styles_list():
+        return [{"key": s.key, "name": s.name, "layout": s.layout} for s in all_styles()]
+
+    def gen_json(res, current_key):
+        cur = next((v for v in res.variants if v["key"] == current_key),
+                   res.variants[0] if res.variants else None)
         return {
             "ok": True, "runid": res.runid, "provider_used": res.provider_used,
             "panels": [p.to_dict() for p in res.panels],
-            "variants": [{"key": v["key"], "name": v["name"],
-                          "cards": [file_url(c) for c in v["cards"]]}
-                         for v in res.variants],
+            "styles": styles_list(),
+            "current": ({"key": cur["key"], "name": cur["name"],
+                         "cards": [file_url(c) for c in cur["cards"]]} if cur else None),
             "caption": res.caption, "warnings": res.warnings, "log": res.log,
             "capabilities": res.capabilities,
         }
@@ -78,7 +88,7 @@ def create_app(settings=None) -> Flask:
         except Exception:
             return {}
 
-    # ---- pages ----------------------------------------------------------
+    # ---- page -----------------------------------------------------------
     @app.get("/")
     def index():
         return render_template(
@@ -87,41 +97,63 @@ def create_app(settings=None) -> Flask:
             text_provider=settings.resolve_text_provider(),
             brand=settings.brand,
             themes=sorted((settings.themes or {}).keys()),
-            styles=[{"key": s.key, "name": s.name} for s in all_styles()],
+            styles=styles_list(),
             search_keyed=bool(settings.serpapi_key or (settings.google_api_key and settings.google_cse_id)),
             sd=bool(settings.sd_url),
             caps=_capabilities(),
         )
 
-    # ---- generate / re-render ------------------------------------------
+    # ---- generate (parse + art + render default template once) ----------
     @app.post("/generate")
     def generate():
         data = request.get_json(silent=True) or request.form.to_dict()
         news = (data.get("news") or "").strip()
         if not news:
             return jsonify(ok=False, error="Please paste some news text."), 400
+        current = data.get("style") or DEFAULT_STYLE
+        opts = _opts_from(data)
+        opts.styles = [current]
         log: list[str] = []
-        res = make_variants(settings, _opts_from(data), news=news, progress=log.append)
+        res = make_variants(settings, opts, news=news, progress=log.append)
         res.log = log
-        return jsonify(result_json(res))
+        return jsonify(gen_json(res, current))
 
+    # ---- re-render current template with edited fields (+ re-find art) ---
     @app.post("/render")
     def render():
         data = request.get_json(silent=True) or {}
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         if not panels:
             return jsonify(ok=False, error="No panels to render."), 400
+        current = data.get("style") or DEFAULT_STYLE
+        opts = _opts_from(data)
+        opts.styles = [current]
         log: list[str] = []
-        res = make_variants(settings, _opts_from(data), panels=panels, progress=log.append)
+        res = make_variants(settings, opts, panels=panels, progress=log.append)
         res.log = log
-        return jsonify(result_json(res))
+        return jsonify(gen_json(res, current))
 
+    # ---- instant template switch (no re-search) -------------------------
+    @app.post("/render_one")
+    def render_one_route():
+        data = request.get_json(silent=True) or {}
+        panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
+        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        style = data.get("style") or DEFAULT_STYLE
+        if not panels:
+            return jsonify(ok=False, error="Nothing to render."), 400
+        cards = render_one(panels, settings, _opts_from(data), style, runid)
+        name = next((s.name for s in all_styles() if s.key == style), style)
+        return jsonify(ok=True, key=style, name=name, runid=runid,
+                       cards=[file_url(c) for c in cards])
+
+    # ---- carousel zip for the selected template -------------------------
     @app.post("/carousel")
     def carousel():
         data = request.get_json(silent=True) or {}
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
-        style_key = data.get("style") or "classic"
+        style_key = data.get("style") or DEFAULT_STYLE
         if not panels:
             return jsonify(ok=False, error="No panels."), 400
         out = build_carousel(panels, settings, _opts_from(data), style_key, runid,

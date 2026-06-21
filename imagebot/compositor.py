@@ -658,6 +658,54 @@ def _layout_halfsplit(ctx):
     _date(ctx, cx, ctx.cy0 + int(u * 0.74), "center", maxw=0.4, maxh=0.2, start=0.32)
 
 
+def _layout_minimal(ctx):
+    u, cx = ctx.u, ctx.w // 2
+    _wordmark(ctx, cx, 0.06, small=True, align="center")
+    maxw = int(ctx.w * 0.8)
+    _logo(ctx, ctx.cy0 + int(u * 0.34), maxw, "center", center_x=cx, max_h=0.24)
+    d = (ctx.panel.date_text or "").strip().upper()
+    if d:
+        _center_text(ctx, d, ctx.fonts.font("ui", max(13, int(u * 0.07))),
+                     cx, ctx.cy0 + int(u * 0.66), (235, 235, 240))
+
+
+def _layout_bigtype(ctx):
+    u, ml = ctx.u, ctx.ml
+    _wordmark(ctx, ctx.right_edge, 0.1, small=True, align="right")
+    _logo(ctx, ctx.cy0 + int(u * 0.18), int(ctx.w * 0.92), "left", ml, max_h=0.46)
+    _pills(ctx, ml, ctx.cy0 + int(u * 0.8), "left")
+    _date(ctx, ctx.right_edge, ctx.cy0 + int(u * 0.78), "right",
+          maxw=0.3, maxh=0.16, start=0.2)
+
+
+def _layout_breaking(ctx):
+    w, u, ml = ctx.w, ctx.u, ctx.ml
+    tag = (ctx.panel.tag_main or "NEWS").upper()
+    f = ctx.fonts.font("ui", max(14, int(u * 0.075)))
+    l, t, r, b = ctx.draw.textbbox((0, 0), tag, font=f)
+    padx, pady = int(w * 0.018), int(u * 0.03)
+    bw, bh = (r - l) + 2 * padx, (b - t) + 2 * pady
+    by = ctx.cy0 + int(u * 0.14)
+    ctx.draw.rectangle([ml, by, ml + bw, by + bh], fill=ctx.accent + (255,))
+    draw_text(ctx.draw, (ml + padx, by + pady), tag, f,
+              readable_text_color(ctx.accent), shadow=False)
+    maxw = int(w * 0.72)
+    y = _logo(ctx, by + bh + int(u * 0.06), maxw, "left", ml, max_h=0.3) + int(u * 0.04)
+    _subtitle(ctx, ml, y, maxw, "left")
+    _wordmark(ctx, ctx.right_edge, 0.1, small=True, align="right")
+    _date(ctx, ctx.right_edge, ctx.cy0 + int(u * 0.7), "right", maxw=0.3, maxh=0.2, start=0.28)
+
+
+def _layout_stack(ctx):
+    u, ml = ctx.u, ctx.ml
+    _wordmark(ctx, ml, 0.12, small=True, align="left")
+    maxw = int(ctx.w * 0.62)
+    y = _logo(ctx, ctx.cy0 + int(u * 0.27), maxw, "left", ml, max_h=0.26) + int(u * 0.03)
+    y = _subtitle(ctx, ml, y, maxw, "left")
+    y = _pills(ctx, ml, y, "left")
+    _date(ctx, ml, y + int(u * 0.01), "left", maxw=0.5, maxh=0.18, start=0.28)
+
+
 _LAYOUTS = {
     "classic": _layout_classic, "center": _layout_center, "mirror": _layout_mirror,
     "sidebar": _layout_sidebar, "bottombar": _layout_bottombar,
@@ -665,6 +713,8 @@ _LAYOUTS = {
     "diagonal": _layout_diagonal, "vertical": _layout_vertical,
     "medallion": _layout_medallion, "ticket": _layout_ticket,
     "ribbon": _layout_ribbon, "halfsplit": _layout_halfsplit,
+    "minimal": _layout_minimal, "bigtype": _layout_bigtype,
+    "breaking": _layout_breaking, "stack": _layout_stack,
 }
 
 

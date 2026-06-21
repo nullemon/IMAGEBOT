@@ -112,6 +112,18 @@ STYLE_PRESETS: list[Style] = [
           accent_mode="series"),
     Style("halfsplit", "Half Split", layout="halfsplit", scrim_left=0,
           title_role="serif", accent_mode="series"),
+    # --- minimal / viral ---
+    Style("minimal", "Minimal", layout="minimal", scrim_left=0, darken=48,
+          accent="#ffffff", accent_mode="fixed", title_role="sans"),
+    Style("bigtype", "Big Type", layout="bigtype", scrim_left=160, darken=24,
+          title_role="heavy", accent_mode="series"),
+    Style("breaking", "Breaking", layout="breaking", scrim_left=150,
+          accent="#ff2d3f", accent_mode="fixed", title_role="heavy"),
+    Style("stack", "Stack", layout="stack", scrim_left=150, title_role="serif",
+          accent_mode="series"),
+    Style("aesthetic", "Aesthetic", layout="minimal", blur=4, darken=40,
+          scrim_bottom=80, accent="#ffffff", accent_mode="fixed",
+          title_role="serif"),
 ]
 
 _BY_KEY = {s.key: s for s in STYLE_PRESETS}

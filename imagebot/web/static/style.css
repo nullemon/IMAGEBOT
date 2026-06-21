@@ -102,6 +102,15 @@ button.small{width:auto;padding:9px 14px}
 .sel-card img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
 .sel-card .dl{display:inline-block;margin-top:7px;font-size:.85rem}
 
+/* template chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
+.chip{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  border-radius:999px;padding:7px 13px;font-size:.82rem;font-weight:500;width:auto;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.chip.active{background:linear-gradient(135deg,var(--accent),#ff7a59);color:#1a1205;
+  border-color:var(--accent);font-weight:700}
+#preview-cards{transition:opacity .15s}
+
 /* panel rows */
 .prow-art .find-logo{align-self:center}
 .prow-art .upload{flex:0 0 auto}

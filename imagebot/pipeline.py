@@ -237,6 +237,19 @@ def build_carousel(panels: list[Panel], settings, opts: GenerateOptions,
     return {"cards": paths, "zip": str(zip_path)}
 
 
+def render_one(panels: list[Panel], settings, opts: GenerateOptions | None,
+               style_key: str, runid: str) -> list[str]:
+    """Render ONE style for already-resolved panels — fast, no art search.
+    Used by the web UI to swap templates instantly."""
+    opts = opts or GenerateOptions()
+    style = get_style(style_key)
+    spec = settings.card_spec(panels_per_card=opts.panels_per_card)
+    spec.style = style
+    _apply_brand(spec, opts)
+    return save_cards(render_cards(panels, spec, _FONTS),
+                      f"{settings.output_dir}/{runid}/{style.key}", prefix="card")
+
+
 # ---- single-style helpers (CLI / back-compat) ----------------------------
 def generate_from_news(text: str, settings, opts: GenerateOptions | None = None,
                        progress=None) -> GenerateResult:

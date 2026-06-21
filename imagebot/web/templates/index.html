@@ -18,7 +18,7 @@
       {% set gpu = [] %}
       {% for k, v in caps.items() %}{% if v %}{% set _ = gpu.append(k) %}{% endif %}{% endfor %}
       {% if gpu %}<span class="pill ok" title="{{ gpu|join(', ') }}">GPU: {{ gpu|length }} on</span>
-      {% else %}<span class="pill" title="install requirements-local.txt for cutout/OCR/upscale">GPU: off</span>{% endif %}
+      {% else %}<span class="pill" title="install requirements-local.txt">GPU: off</span>{% endif %}
     </div>
   </header>
 
@@ -48,49 +48,49 @@ Solo Leveling Season 3 — July 4"></textarea>
         <div class="checks">
           <label><input type="checkbox" id="find_art" checked /> Find art online</label>
           <label><input type="checkbox" id="vision_pick" checked /> AI picks best image</label>
-          <label><input type="checkbox" id="clean_art" /> Clean watermarks <small>(GPU/OCR)</small></label>
+          <label><input type="checkbox" id="clean_art" /> Clean watermarks <small>(GPU)</small></label>
           <label><input type="checkbox" id="find_logo" /> Auto-find logos</label>
           <label><input type="checkbox" id="ai_fallback" /> AI-generate if none</label>
           <label><input type="checkbox" id="write_caption" checked /> Write caption</label>
         </div>
-        <button id="generate" class="primary">✦ Generate {{ styles|length }} styles</button>
+        <button id="generate" class="primary">✦ Make my card</button>
       </div>
     </div>
     <div id="status" class="status hidden"></div>
   </section>
 
-  <!-- 2 · GALLERY -->
+  <!-- 2 · TEMPLATE SWITCHER -->
   <section class="panel wide">
-    <div class="row-between"><h2>2 · Pick a style</h2><span id="run-note" class="muted"></span></div>
-    <div id="empty" class="empty">Generate to see {{ styles|length }} ready-made style variants — click one to enlarge &amp; download.</div>
-    <div id="gallery" class="gallery"></div>
+    <div class="row-between"><h2>2 · Pick a template <small class="muted">— click to swap instantly</small></h2>
+      <span id="run-note" class="muted"></span></div>
+    <div id="empty" class="empty">Make a card, then click any of the {{ styles|length }} templates to drop your news into it — no re-generating.</div>
+    <div id="templates" class="chips hidden"></div>
     <ul id="warnings" class="warnings"></ul>
-  </section>
 
-  <!-- selected style -->
-  <section id="selected" class="panel wide hidden">
-    <div class="row-between">
-      <h2>Selected: <span id="sel-name"></span></h2>
-      <div class="sel-actions">
-        <label class="inline"><input type="checkbox" id="cover" checked /> cover slide</label>
-        <button id="dl-zip" class="primary small">⬇ Download carousel (.zip)</button>
+    <div id="preview-wrap" class="hidden">
+      <div class="row-between">
+        <h3 id="cur-name">—</h3>
+        <div class="sel-actions">
+          <label class="inline"><input type="checkbox" id="cover" checked /> cover slide</label>
+          <button id="dl-zip" class="ghost small">⬇ carousel .zip</button>
+        </div>
       </div>
-    </div>
-    <div id="sel-cards" class="sel-cards"></div>
-    <div id="caption-wrap" class="hidden">
-      <div class="row-between"><h3>Caption</h3><button id="copy-caption" class="ghost">Copy</button></div>
-      <textarea id="caption" rows="6"></textarea>
+      <div id="preview-cards" class="sel-cards"></div>
+      <div id="caption-wrap" class="hidden">
+        <div class="row-between"><h3>Caption</h3><button id="copy-caption" class="ghost">Copy</button></div>
+        <textarea id="caption" rows="5"></textarea>
+      </div>
     </div>
   </section>
 
   <!-- 3 · EDIT -->
   <section id="editor" class="panel wide hidden">
     <div class="row-between">
-      <h2>3 · Tweak &amp; re-render</h2>
+      <h2>3 · Tweak the content</h2>
       <div><button id="add-panel" class="ghost">+ Add series</button>
-           <button id="rerender" class="primary small">↻ Re-render all styles</button></div>
+           <button id="rerender" class="primary small">↻ Apply edits (re-find art)</button></div>
     </div>
-    <p class="hint">Edit any field, paste/upload art, or set a transparent logo per series, then re-render.</p>
+    <p class="hint">Edit any field, paste/upload art, or set a logo per series, then Apply. Template stays the one you picked.</p>
     <div id="panels" class="panels"></div>
   </section>
 
@@ -125,7 +125,7 @@ Solo Leveling Season 3 — July 4"></textarea>
     </div>
   </template>
 
-  <footer class="foot">Runs locally · output in <code>output/&lt;run&gt;/&lt;style&gt;/</code> · <span id="provider-note"></span></footer>
+  <footer class="foot">Runs locally · output in <code>output/&lt;run&gt;/&lt;template&gt;/</code> · <span id="provider-note"></span></footer>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
