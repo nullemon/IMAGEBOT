@@ -8,12 +8,15 @@ date — plus an auto-written caption and one-click **carousel export**.
 Runs **locally**. On an Ubuntu box with a GPU it also does background cut-outs,
 AI upscaling, OCR watermark clean-up, and local Stable-Diffusion art.
 
-![one card](samples/demo.png)
+![card](samples/preview_classic.png)
+
+*(Generated locally with mock key visuals. On your machine each panel uses the
+real series art — AI-vision-picked, cleaned, and cut out on the GPU.)*
 
 ### Pick from a gallery of styles
 Every generate renders the same news in 16 curated looks — click the one you want:
 
-![style gallery](samples/styles_contact.png)
+![style gallery](samples/preview_gallery.png)
 
 ---
 
