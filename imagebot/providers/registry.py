@@ -25,6 +25,9 @@ def build_provider(name: str, settings) -> TextProvider:
     if name == "grok":
         from .openai_provider import GrokProvider
         return GrokProvider(settings.xai_key, settings.xai_model, settings.xai_image_model)
+    if name == "local_sd":
+        from .local_sd import LocalSDProvider
+        return LocalSDProvider(settings.sd_url, settings.sd_model)
     raise ProviderError(f"unknown provider: {name!r}")
 
 
@@ -40,16 +43,18 @@ def get_text_provider(settings, name: str | None = None) -> TextProvider | None:
 
 
 def get_image_provider(settings, name: str | None = None) -> TextProvider | None:
-    """Return a provider that can generate images, preferring `name`."""
+    """Return a provider that can generate images. Prefers a local GPU SD server,
+    then `name`, then any configured image-capable cloud provider."""
     order = []
+    if getattr(settings, "sd_url", ""):
+        order.append("local_sd")
     if name:
         order.append(name.lower())
-    # then any configured image-capable provider
     avail = settings.available_text_providers()
     order += [p for p in IMAGE_CAPABLE if p in avail]
     seen = set()
     for p in order:
-        if p in seen or p not in IMAGE_CAPABLE:
+        if p in seen or p not in IMAGE_CAPABLE + ("local_sd",):
             continue
         seen.add(p)
         try:

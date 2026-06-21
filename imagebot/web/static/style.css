@@ -73,3 +73,35 @@ button:disabled{opacity:.5;cursor:wait}
 
 .foot{color:var(--muted);font-size:.78rem;text-align:center;padding:18px}
 .hidden{display:none}
+
+/* layout */
+.panel.wide{max-width:1180px;margin:0 auto 18px;width:calc(100% - 36px)}
+.io{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+.io textarea{min-height:160px}
+@media(max-width:860px){.io{grid-template-columns:1fr}}
+.side .opts{grid-template-columns:1fr 1fr}
+.muted{color:var(--muted);font-size:.78rem}
+.inline{display:inline-flex;align-items:center;gap:6px;color:var(--text);font-size:.82rem}
+.inline input{width:auto;margin:0}
+button.small{width:auto;padding:9px 14px}
+.checks small{color:var(--muted)}
+
+/* gallery */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:8px}
+.tile{padding:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  display:flex;flex-direction:column;text-align:left}
+.tile img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#000}
+.tile span{padding:8px 10px;font-size:.8rem;font-weight:600;color:var(--text)}
+.tile:hover{border-color:var(--accent)}
+.tile.active{outline:2px solid var(--accent);border-color:var(--accent)}
+
+/* selected */
+.sel-actions{display:flex;align-items:center;gap:14px}
+.sel-cards{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px}
+.sel-card{flex:0 1 320px}
+.sel-card img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
+.sel-card .dl{display:inline-block;margin-top:7px;font-size:.85rem}
+
+/* panel rows */
+.prow-art .find-logo{align-self:center}
+.prow-art .upload{flex:0 0 auto}

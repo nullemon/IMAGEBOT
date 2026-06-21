@@ -10,83 +10,87 @@
   <header class="topbar">
     <div class="brand"><span class="logo">◆</span> IMAGEBOT</div>
     <div class="status-pills">
-      {% if providers %}
-        <span class="pill ok" title="AI providers with a key set">AI: {{ providers|join(', ') }}</span>
-      {% else %}
-        <span class="pill warn" title="No AI keys — using the built-in rule-based parser">AI: none (rule-based)</span>
-      {% endif %}
-      {% if search_keyed %}
-        <span class="pill ok">image search: keyed</span>
-      {% else %}
-        <span class="pill">image search: keyless (DuckDuckGo)</span>
-      {% endif %}
+      {% if providers %}<span class="pill ok">AI: {{ providers|join(', ') }}</span>
+      {% else %}<span class="pill warn">AI: none (rule-based)</span>{% endif %}
+      {% if search_keyed %}<span class="pill ok">search: keyed</span>
+      {% else %}<span class="pill">search: keyless</span>{% endif %}
+      {% if sd %}<span class="pill ok">local SD</span>{% endif %}
+      {% set gpu = [] %}
+      {% for k, v in caps.items() %}{% if v %}{% set _ = gpu.append(k) %}{% endif %}{% endfor %}
+      {% if gpu %}<span class="pill ok" title="{{ gpu|join(', ') }}">GPU: {{ gpu|length }} on</span>
+      {% else %}<span class="pill" title="install requirements-local.txt for cutout/OCR/upscale">GPU: off</span>{% endif %}
     </div>
   </header>
 
-  <main class="grid">
-    <!-- ============ INPUT ============ -->
-    <section class="panel">
-      <h2>1 · Paste your news</h2>
-      <textarea id="news" rows="7" placeholder="One announcement per line, e.g.
+  <!-- 1 · INPUT -->
+  <section class="panel wide">
+    <h2>1 · Paste your news</h2>
+    <div class="io">
+      <textarea id="news" rows="6" placeholder="One announcement per line, e.g.
 Attack on Titan Season 4 new info — June 19
 Jujutsu Kaisen movie announced, July 3
 Solo Leveling Season 3 — July 4"></textarea>
-
-      <div class="opts">
-        <label>AI provider
-          <select id="provider">
-            <option value="auto" {{ 'selected' if text_provider != 'none' }}>auto ({{ text_provider }})</option>
-            {% for p in providers %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-            <option value="none">none (rule-based)</option>
-          </select>
-        </label>
-        <label>Series per image
-          <input id="panels_per_card" type="number" min="1" max="6" value="4" />
-        </label>
-        <label>Event name
-          <input id="event_name" type="text" value="{{ brand.event_name }}" />
-        </label>
-        <label>Watermark
-          <input id="watermark" type="text" value="{{ brand.watermark }}" />
-        </label>
-        <label>Force date (optional)
-          <input id="date_text" type="text" placeholder="e.g. JULY 3" />
-        </label>
+      <div class="side">
+        <div class="opts">
+          <label>AI provider
+            <select id="provider">
+              <option value="auto">auto ({{ text_provider }})</option>
+              {% for p in providers %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+              <option value="none">none (rule-based)</option>
+            </select>
+          </label>
+          <label>Series / image<input id="panels_per_card" type="number" min="1" max="6" value="4" /></label>
+          <label>Event name<input id="event_name" type="text" value="{{ brand.event_name }}" /></label>
+          <label>Watermark<input id="watermark" type="text" value="{{ brand.watermark }}" /></label>
+          <label>Force date<input id="date_text" type="text" placeholder="e.g. JULY 3" /></label>
+          <label>Cover title<input id="cover_title" type="text" value="LINE-UP" /></label>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="find_art" checked /> Find art online</label>
+          <label><input type="checkbox" id="vision_pick" checked /> AI picks best image</label>
+          <label><input type="checkbox" id="clean_art" /> Clean watermarks <small>(GPU/OCR)</small></label>
+          <label><input type="checkbox" id="find_logo" /> Auto-find logos</label>
+          <label><input type="checkbox" id="ai_fallback" /> AI-generate if none</label>
+          <label><input type="checkbox" id="write_caption" checked /> Write caption</label>
+        </div>
+        <button id="generate" class="primary">✦ Generate {{ styles|length }} styles</button>
       </div>
-      <div class="checks">
-        <label><input type="checkbox" id="find_art" checked /> Find art on Google/DDG</label>
-        <label><input type="checkbox" id="ai_fallback" /> AI-generate art if none found</label>
-        <label><input type="checkbox" id="write_caption" checked /> Write a caption</label>
+    </div>
+    <div id="status" class="status hidden"></div>
+  </section>
+
+  <!-- 2 · GALLERY -->
+  <section class="panel wide">
+    <div class="row-between"><h2>2 · Pick a style</h2><span id="run-note" class="muted"></span></div>
+    <div id="empty" class="empty">Generate to see {{ styles|length }} ready-made style variants — click one to enlarge &amp; download.</div>
+    <div id="gallery" class="gallery"></div>
+    <ul id="warnings" class="warnings"></ul>
+  </section>
+
+  <!-- selected style -->
+  <section id="selected" class="panel wide hidden">
+    <div class="row-between">
+      <h2>Selected: <span id="sel-name"></span></h2>
+      <div class="sel-actions">
+        <label class="inline"><input type="checkbox" id="cover" checked /> cover slide</label>
+        <button id="dl-zip" class="primary small">⬇ Download carousel (.zip)</button>
       </div>
+    </div>
+    <div id="sel-cards" class="sel-cards"></div>
+    <div id="caption-wrap" class="hidden">
+      <div class="row-between"><h3>Caption</h3><button id="copy-caption" class="ghost">Copy</button></div>
+      <textarea id="caption" rows="6"></textarea>
+    </div>
+  </section>
 
-      <button id="generate" class="primary">✦ Generate cards</button>
-      <div id="status" class="status hidden"></div>
-    </section>
-
-    <!-- ============ OUTPUT ============ -->
-    <section class="panel">
-      <h2>2 · Result</h2>
-      <div id="empty" class="empty">Your finished, ready-to-post cards will appear here.</div>
-
-      <div id="cards" class="cards"></div>
-
-      <div id="caption-wrap" class="hidden">
-        <div class="row-between"><h3>Caption</h3><button id="copy-caption" class="ghost">Copy</button></div>
-        <textarea id="caption" rows="6"></textarea>
-      </div>
-    </section>
-  </main>
-
-  <!-- ============ EDIT & RE-RENDER ============ -->
+  <!-- 3 · EDIT -->
   <section id="editor" class="panel wide hidden">
     <div class="row-between">
       <h2>3 · Tweak &amp; re-render</h2>
-      <div>
-        <button id="add-panel" class="ghost">+ Add series</button>
-        <button id="rerender" class="primary">↻ Re-render</button>
-      </div>
+      <div><button id="add-panel" class="ghost">+ Add series</button>
+           <button id="rerender" class="primary small">↻ Re-render all styles</button></div>
     </div>
-    <p class="hint">Edit any field, paste a direct image URL, or upload your own art for a perfect result, then re-render.</p>
+    <p class="hint">Edit any field, paste/upload art, or set a transparent logo per series, then re-render.</p>
     <div id="panels" class="panels"></div>
   </section>
 
@@ -94,36 +98,34 @@ Solo Leveling Season 3 — July 4"></textarea>
     <div class="prow">
       <div class="prow-grid">
         <label>Title<input data-f="title" type="text" /></label>
-        <label>Subtitle<input data-f="subtitle" type="text" placeholder="optional / original title" /></label>
+        <label>Subtitle<input data-f="subtitle" type="text" placeholder="optional" /></label>
         <label>Tag<input data-f="tag_main" type="text" /></label>
         <label>Badge<input data-f="tag_sub" type="text" /></label>
         <label>Date<input data-f="date_text" type="text" /></label>
-        <label>Logo
-          <select data-f="logo_style">
-            <option value="auto">auto</option><option value="sans">sans</option>
-            <option value="serif">serif</option><option value="heavy">heavy</option>
-          </select>
+        <label>Logo style
+          <select data-f="logo_style"><option value="auto">auto</option><option value="sans">sans</option>
+            <option value="serif">serif</option><option value="heavy">heavy</option></select>
         </label>
         <label>Theme
-          <select data-f="theme">
-            <option value="auto">auto</option>
-            {% for t in themes %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
-          </select>
+          <select data-f="theme"><option value="auto">auto</option>
+            {% for t in themes %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
         </label>
       </div>
       <div class="prow-art">
         <label class="grow">Search query<input data-f="query" type="text" /></label>
-        <label class="grow">Image URL<input data-f="image_url" type="text" placeholder="paste a direct image link to override search" /></label>
+        <label class="grow">Image URL<input data-f="image_url" type="text" placeholder="direct link to override search" /></label>
         <input type="hidden" data-f="image_path" />
-        <label class="upload">Upload<input type="file" accept="image/*" class="art-file" /></label>
+        <input type="hidden" data-f="logo_path" />
+        <label class="upload">Art<input type="file" accept="image/*" class="art-file" /></label>
+        <label class="upload">Logo<input type="file" accept="image/png,image/webp" class="logo-file" /></label>
+        <button class="ghost find-logo" type="button">Find logo</button>
         <span class="art-state"></span>
-        <button class="ghost danger remove">✕</button>
+        <button class="ghost danger remove" type="button">✕</button>
       </div>
     </div>
   </template>
 
-  <footer class="foot">Runs locally · output saved to <code>output/</code> · <span id="provider-note"></span></footer>
-
+  <footer class="foot">Runs locally · output in <code>output/&lt;run&gt;/&lt;style&gt;/</code> · <span id="provider-note"></span></footer>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

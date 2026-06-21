@@ -10,7 +10,7 @@ import argparse
 import sys
 
 from .config import get_settings
-from .pipeline import GenerateOptions, generate_from_news
+from .pipeline import GenerateOptions, make_variants, build_carousel
 
 
 def _cmd_make(args) -> int:
@@ -25,6 +25,7 @@ def _cmd_make(args) -> int:
         print("No news provided (use --news, --file, or pipe via stdin).", file=sys.stderr)
         return 2
 
+    styles = None if args.all_styles else [args.style]
     opts = GenerateOptions(
         provider=args.provider,
         panels_per_card=args.per,
@@ -32,19 +33,27 @@ def _cmd_make(args) -> int:
         watermark=args.watermark,
         date_text=args.date,
         find_art=not args.no_art,
+        vision_pick=not args.no_vision,
+        clean_art=args.clean,
         ai_fallback=args.ai_art,
+        find_logo=args.find_logo,
         write_caption=not args.no_caption,
-        prefix=args.prefix,
+        cover_title=args.cover_title,
+        styles=styles,
     )
-    res = generate_from_news(news, settings, opts, progress=lambda m: print("  ·", m))
-    print("\nProvider:", res.provider_used)
+    res = make_variants(settings, opts, news=news, progress=lambda m: print("  ·", m))
+    print("\nProvider:", res.provider_used, "| run:", res.runid)
     for p in res.panels:
         print(f"  • {p.title} — {p.tag_main}" + (f" ({p.date_text})" if p.date_text else ""))
     for w in res.warnings:
         print("  ⚠", w)
-    print("\nCards:")
-    for c in res.card_paths:
-        print("  →", c)
+    print("\nStyles rendered:")
+    for v in res.variants:
+        print(f"  → {v['name']:16} {v['cards'][0]}")
+    if args.carousel and res.variants:
+        key = (styles or [res.variants[0]["key"]])[0]
+        car = build_carousel(res.panels, settings, opts, key, res.runid, with_cover=True)
+        print("\nCarousel zip:", car["zip"])
     if res.caption:
         print("\nCaption:\n" + res.caption)
     return 0
@@ -72,8 +81,14 @@ def main(argv=None) -> int:
     m.add_argument("--event", default=None, help="event wordmark, e.g. 'ANIME EXPO'")
     m.add_argument("--watermark", default=None, help="center watermark text")
     m.add_argument("--date", default=None, help="apply this date to all panels")
-    m.add_argument("--prefix", default="card", help="output filename prefix")
+    m.add_argument("--style", default="classic", help="style key (see --all-styles)")
+    m.add_argument("--all-styles", action="store_true", help="render every style variant")
+    m.add_argument("--cover-title", default="LINE-UP", help="carousel cover title")
+    m.add_argument("--carousel", action="store_true", help="also build a carousel .zip (with cover)")
     m.add_argument("--no-art", action="store_true", help="skip image search (gradients only)")
+    m.add_argument("--no-vision", action="store_true", help="don't use AI to pick the best image")
+    m.add_argument("--clean", action="store_true", help="OCR + inpaint to remove watermarks (GPU)")
+    m.add_argument("--find-logo", action="store_true", help="auto search+download transparent logos")
     m.add_argument("--ai-art", action="store_true", help="AI-generate art when none found")
     m.add_argument("--no-caption", action="store_true", help="don't write a caption")
     m.set_defaults(func=_cmd_make)

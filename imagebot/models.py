@@ -19,6 +19,8 @@ class Panel:
     query: str = ""                  # image search query; "" -> derived from title
     image_path: str = ""             # resolved local art file (filled by pipeline)
     image_url: str = ""              # optional explicit art URL (skips search)
+    logo_path: str = ""              # transparent PNG logo to overlay instead of text
+    logo_scale: float = 1.0          # multiplier on the auto-fit logo size
 
     def search_query(self) -> str:
         return (self.query or f"{self.title} anime key visual").strip()
@@ -50,5 +52,6 @@ class CardSpec:
     panels_per_card: int = 4
     divider: bool = True
     variant: str = "classic"         # classic | centered | banner
+    style: object = None             # a styles.Style (None -> classic default)
     brand: BrandConfig = field(default_factory=BrandConfig)
     themes: dict = field(default_factory=dict)

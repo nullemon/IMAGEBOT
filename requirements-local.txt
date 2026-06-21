@@ -1,0 +1,29 @@
+# =========================================================================
+# OPTIONAL local GPU/ML stack for IMAGEBOT (Ubuntu + NVIDIA).
+# The app runs fine WITHOUT any of these — they unlock higher-quality output.
+#
+# IMPORTANT: install a CUDA-enabled PyTorch FIRST (matched to your driver),
+# from https://pytorch.org/get-started/locally/  e.g.:
+#     pip install torch --index-url https://download.pytorch.org/whl/cu121
+# then:  pip install -r requirements-local.txt
+# (or just run: bash scripts/setup_local.sh)
+# =========================================================================
+
+numpy
+
+# Background cutout for the "Cutout Spotlight" / "Soft Focus" styles.
+# isnet-anime model is tuned for anime/illustration subjects.
+rembg                 # use rembg[gpu] if you have onnxruntime-gpu working
+onnxruntime-gpu       # GPU inference for rembg (swap for onnxruntime on CPU)
+
+# Text / watermark detection on scraped art (avoid / clean it up).
+easyocr               # GPU OCR detector+recognizer (en+ja)
+# paddleocr           # alternative OCR — also install paddlepaddle-gpu
+# paddlepaddle-gpu
+
+# Rescue low-resolution art before compositing.
+realesrgan
+basicsr
+
+# Remove detected watermarks/text by inpainting (LaMa).
+simple-lama-inpainting

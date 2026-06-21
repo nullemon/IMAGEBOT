@@ -1,7 +1,8 @@
 """Google Gemini provider — uses the `google-genai` SDK."""
 from __future__ import annotations
 
-from .base import TextProvider, ProviderError, extract_json
+from .base import (TextProvider, ProviderError, extract_json,
+                   img_media_type, parse_index, PICK_INSTRUCTION)
 
 
 class GeminiProvider(TextProvider):
@@ -44,6 +45,18 @@ class GeminiProvider(TextProvider):
             ),
         )
         return extract_json(r.text or "")
+
+    def pick_image(self, images, instruction=PICK_INSTRUCTION):
+        try:
+            from google.genai import types
+            parts = [instruction]
+            for i, data in enumerate(images):
+                parts.append(f"Image {i}:")
+                parts.append(types.Part.from_bytes(data=data, mime_type=img_media_type(data)))
+            r = self._client.models.generate_content(model=self.model, contents=parts)
+            return parse_index(r.text or "", len(images))
+        except Exception:
+            return None
 
     def generate_image(self, prompt: str, size: str = "1024x1024") -> bytes | None:
         try:

@@ -50,6 +50,9 @@ class Settings:
     xai_key: str = ""
     xai_model: str = "grok-2-latest"
     xai_image_model: str = "grok-2-image"
+    # local Stable Diffusion (AUTOMATIC1111 / Forge / ComfyUI-compatible)
+    sd_url: str = ""
+    sd_model: str = ""
     # image search
     serpapi_key: str = ""
     google_api_key: str = ""
@@ -131,6 +134,8 @@ def load_settings() -> Settings:
         xai_key=_env("XAI_API_KEY"),
         xai_model=_env("XAI_MODEL", "grok-2-latest"),
         xai_image_model=_env("XAI_IMAGE_MODEL", "grok-2-image"),
+        sd_url=_env("IMAGEBOT_SD_URL"),
+        sd_model=_env("IMAGEBOT_SD_MODEL"),
         serpapi_key=_env("SERPAPI_KEY"),
         google_api_key=_env("GOOGLE_API_KEY"),
         google_cse_id=_env("GOOGLE_CSE_ID"),

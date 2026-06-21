@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import base64
 
-from .base import TextProvider, ProviderError, extract_json
+from .base import (TextProvider, ProviderError, extract_json,
+                   img_media_type, parse_index, PICK_INSTRUCTION)
 
 
 class OpenAIProvider(TextProvider):
@@ -52,6 +53,21 @@ class OpenAIProvider(TextProvider):
                 system + "\n\nReply with ONLY valid JSON. No prose, no code fences.",
                 user, max_tokens=4096)
             return extract_json(text)
+
+    def pick_image(self, images, instruction=PICK_INSTRUCTION):
+        try:
+            content = [{"type": "text", "text": instruction}]
+            for i, data in enumerate(images):
+                b64 = base64.b64encode(data).decode()
+                content.append({"type": "text", "text": f"Image {i}:"})
+                content.append({"type": "image_url", "image_url": {
+                    "url": f"data:{img_media_type(data)};base64,{b64}"}})
+            r = self._client.chat.completions.create(
+                model=self.model, max_tokens=16,
+                messages=[{"role": "user", "content": content}])
+            return parse_index(r.choices[0].message.content or "", len(images))
+        except Exception:
+            return None
 
     def generate_image(self, prompt: str, size: str = "1024x1024") -> bytes | None:
         try:

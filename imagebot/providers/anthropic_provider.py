@@ -1,7 +1,10 @@
 """Claude (Anthropic) provider — uses the official `anthropic` SDK."""
 from __future__ import annotations
 
-from .base import TextProvider, ProviderError, extract_json
+import base64
+
+from .base import (TextProvider, ProviderError, extract_json,
+                   img_media_type, parse_index, PICK_INSTRUCTION)
 
 
 class AnthropicProvider(TextProvider):
@@ -46,3 +49,19 @@ class AnthropicProvider(TextProvider):
                 max_tokens=4096,
             )
             return extract_json(text)
+
+    def pick_image(self, images, instruction=PICK_INSTRUCTION):
+        try:
+            content = [{"type": "text", "text": instruction}]
+            for i, data in enumerate(images):
+                content.append({"type": "text", "text": f"Image {i}:"})
+                content.append({"type": "image", "source": {
+                    "type": "base64", "media_type": img_media_type(data),
+                    "data": base64.b64encode(data).decode()}})
+            r = self._client.messages.create(
+                model=self.model, max_tokens=16,
+                messages=[{"role": "user", "content": content}])
+            text = "".join(b.text for b in r.content if b.type == "text")
+            return parse_index(text, len(images))
+        except Exception:
+            return None

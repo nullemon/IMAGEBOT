@@ -149,31 +149,67 @@ def _cache_path(query: str) -> Path:
     return CACHE_DIR / f"{h}.jpg"
 
 
-def download_best(query: str, settings, max_candidates: int = 6,
-                  use_cache: bool = True) -> str | None:
-    """Search, download a few candidates, keep the best. Returns a local path."""
+def _jpeg_bytes(img: Image.Image, max_side: int = 512) -> bytes:
+    im = img.copy()
+    im.thumbnail((max_side, max_side), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, "JPEG", quality=82)
+    return buf.getvalue()
+
+
+def download_best(query: str, settings, max_candidates: int = 8,
+                  use_cache: bool = True, provider=None, clean: bool = False,
+                  do_upscale: bool = True) -> str | None:
+    """Search, download candidates, pick the best (vision if a provider is given,
+    else a resolution/aspect heuristic), optionally clean watermarks + upscale.
+    Returns a local cached path, or None."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cached = _cache_path(query)
     if use_cache and cached.exists():
         return str(cached)
 
     urls = search_image_urls(query, settings, limit=max_candidates * 2)
-    best_img, best_score = None, 0.0
-    tried = 0
+    cands: list[tuple[Image.Image, float]] = []
     for url in urls:
-        if tried >= max_candidates:
+        if len(cands) >= max_candidates:
             break
         img = _download(url)
         if img is None:
             continue
-        tried += 1
         sc = _score(img)
-        if sc > best_score:
-            best_img, best_score = img, sc
-
-    if best_img is None:
+        if sc > 0:
+            cands.append((img, sc))
+    if not cands:
         return None
-    best_img.save(cached, "JPEG", quality=90)
+
+    cands.sort(key=lambda c: c[1], reverse=True)
+    winner = cands[0][0]
+
+    # vision pick among the top heuristic candidates
+    if provider is not None and len(cands) > 1:
+        topk = cands[:min(5, len(cands))]
+        try:
+            idx = provider.pick_image([_jpeg_bytes(c[0]) for c in topk])
+            if idx is not None:
+                winner = topk[idx][0]
+        except Exception:
+            pass
+
+    # optional local enhancement (no-ops if libs/GPU absent)
+    if clean:
+        try:
+            from . import enhance
+            winner = enhance.clean_plate(winner)
+        except Exception:
+            pass
+    if do_upscale:
+        try:
+            from . import enhance
+            winner = enhance.upscale(winner)
+        except Exception:
+            pass
+
+    winner.convert("RGB").save(cached, "JPEG", quality=92)
     return str(cached)
 
 

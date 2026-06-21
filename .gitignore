@@ -23,7 +23,7 @@ config.local.yaml
 # Generated output (don't commit rendered cards / downloaded art)
 output/
 cache/
-samples/_generated/
+samples/_*/
 *.tmp
 
 # Editors / OS
