@@ -1,6 +1,6 @@
 # IMAGEBOT — anime news card maker
 
-Paste a line of news → get a **gallery of ~20 finished, ready-to-post styles** to
+Paste a line of news → get a **gallery of ~26 finished, ready-to-post styles** to
 pick from, in the “ANIME EXPO” line-up look: stacked panels with the series art,
 a logo, status pills (`SEASON 4` · `NEW INFO`), the event wordmark, and a big
 date — plus an auto-written caption and one-click **carousel export**.
@@ -14,9 +14,13 @@ AI upscaling, OCR watermark clean-up, and local Stable-Diffusion art.
 real series art — AI-vision-picked, cleaned, and cut out on the GPU.)*
 
 ### Pick from a gallery of styles
-Every generate renders the same news in 20 curated looks — each with its own *layout* (where the title, date, pills and art sit), not just a recolour — click the one you want:
+Every generate renders the same news in 26 curated looks — each with its own *layout* (where the title, date, pills and art sit), not just a recolour — click the one you want:
 
 ![style gallery](samples/preview_gallery.png)
+
+A few of the distinct layouts up close:
+
+![layouts](samples/preview_newlayouts.png)
 
 ---
 
@@ -27,16 +31,18 @@ your news text
    │  ▶ parse into panels (title, season, date…)     ← Claude / ChatGPT / Gemini / Grok, or built-in rules
    │  ▶ find each series' art on Google / DuckDuckGo  ← AI picks the cleanest; or upload / paste a URL
    │  ▶ (GPU, optional) cut-out · upscale · de-watermark
-   │  ▶ render the same panels in 20 styles           ← you pick the look
+   │  ▶ render the same panels in 26 styles           ← you pick the look
    ▼
 ready-to-post PNGs (1080×1350) · caption · carousel .zip (with cover slide)
 ```
 
-- **20 curated styles, generated at once** — Classic Expo, Cutout Spotlight, Soft
+- **26 curated styles, generated at once** — Classic Expo, Cutout Spotlight, Soft
   Focus, Duotone, Neon Night, Noir, Magazine, Cinematic Bars, Vaporwave, Minimal
   Mono, Comic Pop, Sunset, Midnight, Poster Center, Grunge, Festival, Editorial,
-  Headline, Sticker, Split. Each uses one of 7 layouts (classic, centered,
-  mirrored, side-panel, bottom-bar, lower-third, date-sticker). Pick one and
+  Headline, Sticker, Split, Date Stamp, Vertical, Ticket, Ribbon, Diagonal,
+  Half Split. Each uses one of 13 layouts (classic, centered, mirrored, side-panel,
+  bottom-bar, lower-third, date-sticker, diagonal, vertical title, date-medallion,
+  ticket-stub, ribbon, half-split). Pick one and
   download, or export the whole carousel.
 - **Clean art, not clutter** — AI vision picks the best/cleanest key visual among
   candidates; the GPU stack can cut the character out onto a designed background,
@@ -116,7 +122,7 @@ SerpApi → Google CSE → DuckDuckGo → Bing.
 ## Command line
 
 ```bash
-# render all 20 styles + a caption
+# render all 26 styles + a caption
 python -m imagebot make --news "Bleach S4 July 4
 Frieren S3 July 4
 Solo Leveling S3 July 4" --all-styles
@@ -139,13 +145,13 @@ python -m imagebot web --port 8080     # launch the UI
 
 ```
 imagebot/
-  styles.py         20 curated Style presets (+ 7 distinct layouts) (the gallery you pick from)
+  styles.py         26 curated Style presets (+ 13 distinct layouts) (the gallery you pick from)
   compositor.py     Pillow engine — backgrounds, scrims, effects, logos, dates, cover
   enhance.py        OPTIONAL GPU: rembg cutout · Real-ESRGAN upscale · OCR · LaMa inpaint
   logos.py          local logo library + upload + auto search/download
   news_parser.py    news text -> structured Panels (LLM, rule-based fallback)
   image_search.py   SerpApi/CSE/DuckDuckGo/Bing + download, score, vision-pick, cache
-  pipeline.py       orchestration: parse -> art/logos -> 20 styles -> carousel
+  pipeline.py       orchestration: parse -> art/logos -> 26 styles -> carousel
   providers/        Claude · OpenAI · Gemini · Grok · local Stable Diffusion (lazy)
   web/              Flask app + single-page gallery UI
 run.py · scripts/setup_local.sh · scripts/fetch_fonts.py

@@ -99,6 +99,19 @@ STYLE_PRESETS: list[Style] = [
     Style("split", "Split", layout="mirror", bg="art_duotone",
           duotone=("#101225", "#ffb020"), scrim_left=120, scrim_right=120,
           accent="#ffb020", accent_mode="fixed"),
+    # --- new layouts ---
+    Style("stamp", "Date Stamp", layout="medallion", darken=42,
+          accent_mode="series", scrim_left=0),
+    Style("vertical", "Vertical", layout="vertical", scrim_left=170,
+          accent="#39e0ff", accent_mode="fixed", title_role="heavy"),
+    Style("ticket", "Ticket", layout="ticket", scrim_left=150,
+          accent="#f5a623", accent_mode="fixed"),
+    Style("ribbon", "Ribbon", layout="ribbon", darken=30, scrim_bottom=120,
+          accent="#e23b4e", accent_mode="fixed", title_role="heavy"),
+    Style("diagonal", "Diagonal", layout="diagonal", scrim_left=0,
+          accent_mode="series"),
+    Style("halfsplit", "Half Split", layout="halfsplit", scrim_left=0,
+          title_role="serif", accent_mode="series"),
 ]
 
 _BY_KEY = {s.key: s for s in STYLE_PRESETS}

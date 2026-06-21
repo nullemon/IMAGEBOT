@@ -269,12 +269,14 @@ def _title_role(style: Style, panel: Panel, fonts: FontBook) -> str:
 
 
 def _draw_logo_block(draw, base, panel, fonts, style, w, u, top_y, max_w,
-                     align="left", left=0, max_h_frac=0.34):
+                     align="left", left=0, max_h_frac=0.34, center_x=None):
     """Draw the logo image (if any) or the styled title text. Returns bottom y.
-    align: left | center | right  (for right, `left` is the right anchor x)."""
+    align: left | center | right  (for right, `left` is the right anchor x;
+    for center, pass center_x to centre within a region else the full width)."""
     def _x(width):
         if align == "center":
-            return (w - width) // 2
+            c = w // 2 if center_x is None else center_x
+            return c - width // 2
         if align == "right":
             return left - width
         return left
@@ -433,11 +435,19 @@ def _pills(ctx, x, y, align="left"):
     return y + hh + int(u * 0.04)
 
 
-def _logo(ctx, top_y, max_w, align="left", anchor=None, max_h=0.34):
+def _logo(ctx, top_y, max_w, align="left", anchor=None, max_h=0.34, center_x=None):
     anchor = ctx.ml if anchor is None else anchor
     return _draw_logo_block(ctx.draw, ctx.base, ctx.panel, ctx.fonts, ctx.style,
                             ctx.w, ctx.u, top_y, max_w, align=align, left=anchor,
-                            max_h_frac=max_h)
+                            max_h_frac=max_h, center_x=center_x)
+
+
+def _center_text(ctx, text, font, cx, top_y, fill, shadow=True):
+    if not text:
+        return 0
+    l, t, r, b = ctx.draw.textbbox((0, 0), text, font=font)
+    draw_text(ctx.draw, (cx - (r - l) // 2, top_y), text, font, fill, shadow=shadow)
+    return b - t
 
 
 def _block(ctx, box, alpha=232, edge=False, edge_side="right"):
@@ -535,10 +545,126 @@ def _layout_badge(ctx):
     _wordmark(ctx, ml, 0.84, small=True, align="left")
 
 
+def _layout_diagonal(ctx):
+    w, h, u, ml = ctx.w, ctx.h, ctx.u, ctx.ml
+    poly = [(0, 0), (int(w * 0.52), 0), (int(w * 0.40), h), (0, h)]
+    ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(ov).polygon(poly, fill=(10, 10, 14, 235))
+    ctx.base.alpha_composite(ov)
+    ImageDraw.Draw(ctx.base).line([(int(w * 0.52), 0), (int(w * 0.40), h)],
+                                  fill=ctx.accent + (255,), width=7)
+    maxw = int(w * 0.4)
+    _wordmark(ctx, ml, 0.1, small=True, align="left")
+    y = _logo(ctx, ctx.cy0 + int(u * 0.2), maxw, "left", ml, max_h=0.26) + int(u * 0.04)
+    y = _subtitle(ctx, ml, y, maxw, "left")
+    _pills(ctx, ml, y, "left")
+    _date(ctx, ctx.right_edge, ctx.cy0 + int(u * 0.38), "right")
+
+
+def _layout_vertical(ctx):
+    w, h, u, ml = ctx.w, ctx.h, ctx.u, ctx.ml
+    title = ctx.panel.title.strip() or "UNTITLED"
+    role = ctx.fonts.role_for_text(title, _title_role(ctx.style, ctx.panel, ctx.fonts)) \
+        or _title_role(ctx.style, ctx.panel, ctx.fonts)
+    thick = int(u * 0.26)
+    f = ctx.fonts.fit(ctx.draw, title, role, int(h * 0.82), thick, start=thick)
+    l, t, r, b = ctx.draw.textbbox((0, 0), title, font=f)
+    layer = Image.new("RGBA", (r - l + 10, b - t + 10), (0, 0, 0, 0))
+    draw_text(ImageDraw.Draw(layer), (5 - l, 5 - t), title, f, WHITE)
+    layer = layer.rotate(90, expand=True)
+    ly = (h - layer.height) // 2
+    ctx.base.alpha_composite(layer, (ml, ly))
+    bar_x = ml + layer.width + 8
+    ImageDraw.Draw(ctx.base).rectangle([bar_x, ly, bar_x + 6, ly + layer.height],
+                                       fill=ctx.accent + (255,))
+    _wordmark(ctx, ctx.right_edge, 0.1, small=True, align="right")
+    _date(ctx, ctx.right_edge, ctx.cy0 + int(u * 0.38), "right")
+    _pills(ctx, bar_x + int(w * 0.03), ctx.cy0 + int(u * 0.74), "left")
+
+
+def _layout_medallion(ctx):
+    w, u, ml = ctx.w, ctx.u, ctx.ml
+    d = (ctx.panel.date_text or "").strip().upper()
+    cxc, cyc, R = int(w * 0.17), ctx.cy0 + ctx.u // 2, int(u * 0.34)
+    lx = ml
+    if d:
+        ctx.draw.ellipse([cxc - R, cyc - R, cxc + R, cyc + R], fill=ctx.accent + (255,))
+        ctx.draw.ellipse([cxc - R + 8, cyc - R + 8, cxc + R - 8, cyc + R - 8],
+                         outline=(255, 255, 255, 210), width=3)
+        fg = readable_text_color(ctx.accent)
+        parts = d.split()
+        if len(parts) >= 2:
+            mf = ctx.fonts.font("ui", int(R * 0.42))
+            df = ctx.fonts.font("date", int(R * 0.85))
+            _center_text(ctx, parts[0], mf, cxc, cyc - int(R * 0.5), fg, shadow=False)
+            _center_text(ctx, " ".join(parts[1:]), df, cxc, cyc - int(R * 0.22), fg, shadow=False)
+        else:
+            _center_text(ctx, d, ctx.fonts.font("date", int(R * 0.6)), cxc,
+                         cyc - int(R * 0.3), fg, shadow=False)
+        lx = cxc + R + int(w * 0.03)
+    maxw = ctx.right_edge - lx
+    y = _logo(ctx, ctx.cy0 + int(u * 0.24), maxw, "left", lx, max_h=0.3) + int(u * 0.04)
+    y = _subtitle(ctx, lx, y, maxw, "left")
+    _pills(ctx, lx, y, "left")
+    _wordmark(ctx, ctx.right_edge, 0.1, small=True, align="right")
+
+
+def _layout_ticket(ctx):
+    w, h, u, ml = ctx.w, ctx.h, ctx.u, ctx.ml
+    stubx = int(w * 0.72)
+    _block(ctx, (stubx, 0, w, h), alpha=236)
+    dd = ImageDraw.Draw(ctx.base)
+    dd.line([(stubx, 0), (stubx, h)], fill=ctx.accent + (255,), width=3)
+    yy = 8
+    while yy < h:
+        dd.ellipse([stubx - 5, yy, stubx + 5, yy + 9], fill=(0, 0, 0, 255))
+        yy += 24
+    _date(ctx, stubx + (w - stubx) // 2, ctx.cy0 + int(u * 0.3), "center",
+          maxw=0.24, maxh=0.42, start=0.42)
+    maxw = stubx - ml - int(w * 0.03)
+    _wordmark(ctx, ml, 0.1, small=True, align="left")
+    y = _logo(ctx, ctx.cy0 + int(u * 0.24), maxw, "left", ml, max_h=0.3) + int(u * 0.04)
+    y = _subtitle(ctx, ml, y, maxw, "left")
+    _pills(ctx, ml, y, "left")
+
+
+def _layout_ribbon(ctx):
+    w, u, ml = ctx.w, ctx.u, ctx.ml
+    barh = int(u * 0.2)
+    by = ctx.cy0 + int(u * 0.08)
+    ImageDraw.Draw(ctx.base).rectangle([0, by, w, by + barh], fill=ctx.accent + (255,))
+    fg = readable_text_color(ctx.accent)
+    f = ctx.fonts.font("ui", max(13, int(barh * 0.46)))
+    draw_text(ctx.draw, (ml, by + int(barh * 0.27)), ctx.brand.event_name.upper(), f, fg, shadow=False)
+    d = (ctx.panel.date_text or "").strip().upper()
+    if d:
+        l, t, r, b = ctx.draw.textbbox((0, 0), d, font=f)
+        draw_text(ctx.draw, (ctx.right_edge - (r - l), by + int(barh * 0.27)), d, f, fg, shadow=False)
+    maxw = int(w * 0.72)
+    y = _logo(ctx, by + barh + int(u * 0.07), maxw, "left", ml, max_h=0.3) + int(u * 0.04)
+    _pills(ctx, ml, y, "left")
+
+
+def _layout_halfsplit(ctx):
+    w, h, u = ctx.w, ctx.h, ctx.u
+    half = int(w * 0.5)
+    cx = half // 2
+    _block(ctx, (0, 0, half, h), alpha=245, edge=True, edge_side="right")
+    maxw = int(half * 0.84)
+    _wordmark(ctx, cx, 0.08, small=True, align="center")
+    y = _logo(ctx, ctx.cy0 + int(u * 0.18), maxw, "center", center_x=cx, max_h=0.22) + int(u * 0.035)
+    y = _subtitle(ctx, cx, y, maxw, "center")
+    _pills(ctx, cx, y, "center")
+    _date(ctx, cx, ctx.cy0 + int(u * 0.74), "center", maxw=0.4, maxh=0.2, start=0.32)
+
+
 _LAYOUTS = {
     "classic": _layout_classic, "center": _layout_center, "mirror": _layout_mirror,
     "sidebar": _layout_sidebar, "bottombar": _layout_bottombar,
     "lowerthird": _layout_lowerthird, "badge": _layout_badge,
+    "diagonal": _layout_diagonal, "vertical": _layout_vertical,
+    "medallion": _layout_medallion, "ticket": _layout_ticket,
+    "ribbon": _layout_ribbon, "halfsplit": _layout_halfsplit,
 }
 
 
