@@ -1,29 +1,37 @@
 # =========================================================================
-# OPTIONAL local GPU/ML stack for IMAGEBOT (Ubuntu + NVIDIA).
-# The app runs fine WITHOUT any of these — they unlock higher-quality output.
+# OPTIONAL local GPU/ML stack for IMAGEBOT — the SAME proven setup as
+# nullemon/mangatranslator (so it installs identically on your box).
+# The app runs fine WITHOUT any of this; each feature auto-skips if absent.
 #
-# IMPORTANT: install a CUDA-enabled PyTorch FIRST (matched to your driver),
-# from https://pytorch.org/get-started/locally/  e.g.:
-#     pip install torch --index-url https://download.pytorch.org/whl/cu121
-# then:  pip install -r requirements-local.txt
-# (or just run: bash scripts/setup_local.sh)
+# Easiest:  bash scripts/setup_local.sh   (CUDA torch + CRAFT + model downloads)
+# Manual :  pip install -r requirements-local.txt   (then see setup_local.sh for CRAFT)
 # =========================================================================
 
-numpy
+# Pinned for compatibility with onnxruntime / LaMa / spandrel (matches mangatranslator)
+numpy>=1.26.0,<2.0.0
+opencv-python-headless>=4.10.0,<4.12.0
+scipy>=1.10.0
+gdown>=4.6.0
 
-# Background cutout for the "Cutout Spotlight" / "Soft Focus" styles.
-# isnet-anime model is tuned for anime/illustration subjects.
-rembg                 # use rembg[gpu] if you have onnxruntime-gpu working
-onnxruntime-gpu       # GPU inference for rembg (swap for onnxruntime on CPU)
+# Torch — on Linux the default wheels already ship CUDA for most NVIDIA GPUs
+torch>=2.2.0
+torchvision>=0.17.0
 
-# Text / watermark detection on scraped art (avoid / clean it up).
-easyocr               # GPU OCR detector+recognizer (en+ja)
-# paddleocr           # alternative OCR — also install paddlepaddle-gpu
-# paddlepaddle-gpu
+# Background cut-out for the "Cutout Spotlight" / "Soft Focus" styles
+rembg>=2.0.0
 
-# Rescue low-resolution art before compositing.
-realesrgan
-basicsr
+# Pixel-level text / watermark detection: comic-text-detector (ONNX) + CRAFT.
+onnxruntime-gpu>=1.17.0           # swap for plain 'onnxruntime' on a CPU-only box
+huggingface_hub[hf_xet]>=0.24.0
 
-# Remove detected watermarks/text by inpainting (LaMa).
-simple-lama-inpainting
+# Read Japanese text if you ever want it (optional; not needed for clean-up)
+manga-ocr>=0.1.11
+
+# Clean text / watermark erasure — GPU LaMa (much better than cv2.inpaint)
+simple-lama-inpainting>=0.1.0
+
+# Super-resolution for low-res art — Real-ESRGAN (anime) via spandrel
+spandrel>=0.3.0
+
+# NOTE: craft-text-detector is installed by scripts/setup_local.sh with --no-deps
+# (its own setup pins an ancient opencv that breaks modern installs).

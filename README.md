@@ -60,21 +60,30 @@ Need it perfect? Edit any field, upload art/logo per series, **Re-render all sty
 ### Local GPU box (Ubuntu + NVIDIA) — the full power
 
 ```bash
-bash scripts/setup_local.sh     # venv + core + CUDA torch + cutout/OCR/upscale/inpaint
+bash scripts/setup_local.sh     # venv + CUDA torch + cutout/detect/inpaint/upscale + models
 ```
 
-This installs the optional stack from `requirements-local.txt`:
+Same proven stack as `nullemon/mangatranslator`, so it installs identically:
 
 | Feature | Library | What it does |
 |---|---|---|
 | Cutout | `rembg` (isnet-anime) | character on a clean designed bg (the “Spotlight”/“Soft Focus” styles) |
-| Upscale | Real-ESRGAN | rescue low-res scraped art |
-| OCR | EasyOCR / PaddleOCR | detect existing text & watermarks |
-| Inpaint | LaMa (`simple-lama-inpainting`) | remove the detected watermarks/text |
+| Text/watermark detect | comic-text-detector (ONNX) + CRAFT | pixel-level text-stroke masks |
+| Erase | LaMa (`simple-lama-inpainting`) | surgically inpaint the detected text/watermarks |
+| Upscale | Real-ESRGAN anime (via `spandrel`) | rescue low-res scraped art |
+| (optional) | `manga-ocr` | read Japanese text |
 
-Everything auto-detects: if a lib isn't installed the feature is skipped. The web
-header shows how many GPU features are live; `python -m imagebot ... --clean`
-turns on watermark removal.
+Model weights auto-download to `models/` on first use (`comictextdetector.pt.onnx`,
+Real-ESRGAN anime). **Already ran the manga translator?** Point IMAGEBOT at the
+weights it downloaded to skip re-downloading:
+
+```bash
+export TEXT_SEG_MODEL=/path/to/mangatranslator/models/comictextdetector.pt.onnx
+```
+
+Everything auto-detects: if a lib/model/GPU isn't present the feature is skipped.
+The web header shows how many GPU features are live; tick **“Clean watermarks”** in
+the UI or pass `--clean` on the CLI to erase source text/watermarks from scraped art.
 
 **Local Stable Diffusion art:** run AUTOMATIC1111/Forge/ComfyUI, set
 `IMAGEBOT_SD_URL=http://127.0.0.1:7860` in `.env`, and the bot will GPU-generate
