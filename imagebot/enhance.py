@@ -26,6 +26,11 @@ CACHE = Path("cache")
 MODELS = Path("models")
 _CUTOUT_DIR = CACHE / "cutouts"
 
+# Keep ALL model downloads inside this bot's own models/ folder (self-contained,
+# no global caches, no dependency on any other project).
+os.environ.setdefault("U2NET_HOME", str(MODELS / "rembg"))      # rembg cut-out models
+os.environ.setdefault("HF_HOME", str(MODELS / "hf"))            # any HuggingFace (manga-ocr)
+
 # model weights (auto-downloaded on first use; same sources as mangatranslator)
 COMIC_TEXT_URLS = [
     "https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.3/comictextdetector.pt.onnx",

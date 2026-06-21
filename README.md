@@ -103,13 +103,17 @@ Same proven stack as `nullemon/mangatranslator`, so it installs identically:
 | Upscale | Real-ESRGAN anime (via `spandrel`) | rescue low-res scraped art |
 | (optional) | `manga-ocr` | read Japanese text |
 
-Model weights auto-download to `models/` on first use (`comictextdetector.pt.onnx`,
-Real-ESRGAN anime). **Already ran the manga translator?** Point IMAGEBOT at the
-weights it downloaded to skip re-downloading:
+All model weights are **self-contained**: `setup_local.sh` downloads them into this
+bot's own `models/` folder (comic-text-detector, Real-ESRGAN anime, and the rembg
+cut-out model), so nothing leaks into global caches or depends on another project.
+Nothing to point at — it just works.
+
+<details><summary>Optional — reuse a comic-text-detector you already downloaded</summary>
 
 ```bash
-export TEXT_SEG_MODEL=/path/to/mangatranslator/models/comictextdetector.pt.onnx
+echo 'TEXT_SEG_MODEL=/path/to/another/comictextdetector.pt.onnx' >> .env
 ```
+</details>
 
 Everything auto-detects: if a lib/model/GPU isn't present the feature is skipped.
 The web header shows how many GPU features are live; tick **“Clean watermarks”** in

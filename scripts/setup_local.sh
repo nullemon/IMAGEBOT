@@ -24,11 +24,18 @@ echo "==> CUDA 12 runtime libs for onnxruntime-gpu"
 pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 \
     nvidia-cufft-cu12 nvidia-curand-cu12 2>/dev/null || echo "!! cuda libs skipped"
 
-echo "==> Pre-download models (comic-text-detector + Real-ESRGAN anime)"
+echo "==> Pre-download all models into ./models (self-contained, separate to this bot)"
 python - <<'PY' || true
+from PIL import Image
 from imagebot import enhance
 enhance._ensure_weight("comictextdetector.pt.onnx", enhance.COMIC_TEXT_URLS)
 enhance._ensure_weight("RealESRGAN_x4plus_anime_6B.pth", enhance.REALESRGAN_URLS)
+try:                       # pulls the rembg cut-out model into ./models/rembg
+    enhance.remove_background(Image.new("RGB", (64, 64), (180, 80, 60)))
+except Exception:
+    pass
+import os
+print("models/:", sorted(os.listdir("models")) if os.path.isdir("models") else "(none)")
 PY
 
 echo "==> CJK font for Japanese subtitles"
