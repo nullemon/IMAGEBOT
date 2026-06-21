@@ -55,3 +55,30 @@ class CardSpec:
     style: object = None             # a styles.Style (None -> classic default)
     brand: BrandConfig = field(default_factory=BrandConfig)
     themes: dict = field(default_factory=dict)
+
+
+@dataclass
+class NewsPost:
+    """A single-story news post (the IG/FB anime-news format)."""
+    headline: str                    # the news statement (a sentence)
+    body: str = ""                   # optional sub-text
+    category: str = "NEWS"           # NEWS / BREAKING / RELEASE DATE / RANKING / TRAILER
+    source: str = ""                 # source / handle, e.g. "@AnimeNews"
+    date_text: str = ""              # short date
+    accent: str = ""                 # hex; "" -> theme/auto
+    theme: str = "auto"
+    query: str = ""                  # image search query
+    image_path: str = ""
+    image_url: str = ""
+    items: list = field(default_factory=list)   # for list / ranking posts
+
+    def search_query(self) -> str:
+        return (self.query or f"{self.headline} anime key visual").strip()
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "NewsPost":
+        allowed = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in d.items() if k in allowed})

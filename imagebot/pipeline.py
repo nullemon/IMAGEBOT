@@ -11,10 +11,13 @@ from . import logos
 from .compositor import render_cards, render_cover, save_cards
 from .fonts import FontBook
 from .image_search import download_best, fetch_url_to_file
-from .models import Panel
-from .news_parser import parse_news
+from .models import Panel, NewsPost
+from .news_parser import parse_news, parse_news_post
+from .newscard import render_news, save_news, NEWS_TEMPLATES, DEFAULT_NEWS
 from .providers import get_text_provider, get_image_provider
 from .styles import all_styles, get_style
+
+_NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
 
 _FONTS = FontBook()
 
@@ -248,6 +251,132 @@ def render_one(panels: list[Panel], settings, opts: GenerateOptions | None,
     _apply_brand(spec, opts)
     return save_cards(render_cards(panels, spec, _FONTS),
                       f"{settings.output_dir}/{runid}/{style.key}", prefix="card")
+
+
+# ==========================================================================
+# News posts (single-story templates)
+# ==========================================================================
+@dataclass
+class NewsResult:
+    post: NewsPost
+    runid: str = ""
+    current: dict = field(default_factory=dict)   # {key, name, cards:[...]}
+    caption: str = ""
+    provider_used: str = "none"
+    warnings: list = field(default_factory=list)
+    log: list = field(default_factory=list)
+    capabilities: dict = field(default_factory=dict)
+
+
+_NEWS_CAPTION_SYSTEM = (
+    "Write ONE Instagram caption for a single anime-news post. A short hooky "
+    "line restating the news, then 8-15 relevant hashtags on the last line. "
+    "Tasteful emoji. Under 500 characters. Plain text.")
+
+
+def _resolve_post_art(post: NewsPost, settings, opts: GenerateOptions, provider, progress):
+    warnings = []
+    if post.image_path and Path(post.image_path).exists():
+        return warnings
+    if post.image_url:
+        if progress:
+            progress("downloading provided image")
+        p = fetch_url_to_file(post.image_url, post.headline[:40] or "news")
+        if p:
+            post.image_path = p
+            return warnings
+    if opts.find_art:
+        if progress:
+            progress(f"finding art for the story" + (" (AI pick)" if (opts.vision_pick and provider) else ""))
+        p = download_best(post.search_query(), settings,
+                          provider=(provider if opts.vision_pick else None), clean=opts.clean_art)
+        if p:
+            post.image_path = p
+            return warnings
+    if opts.ai_fallback:
+        ip = get_image_provider(settings, opts.provider)
+        if ip is not None:
+            data = ip.generate_image(f"{post.headline}, anime key visual, cinematic, no text",
+                                     size="1024x1280")
+            if data:
+                from .image_search import CACHE_DIR
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                out = CACHE_DIR / f"ai_news_{abs(hash(post.headline)) % (10**10)}.png"
+                try:
+                    from PIL import Image
+                    Image.open(io.BytesIO(data)).convert("RGB").save(out)
+                    post.image_path = str(out)
+                    return warnings
+                except Exception:
+                    pass
+    warnings.append("No art found — used a themed gradient.")
+    return warnings
+
+
+def render_news_one(post: NewsPost, settings, opts: GenerateOptions | None,
+                    template_key: str, runid: str) -> list[str]:
+    """Render ONE news template for an already-resolved post (instant switch)."""
+    opts = opts or GenerateOptions()
+    spec = settings.card_spec()
+    _apply_brand(spec, opts)
+    card = render_news(post, template_key, spec, _FONTS)
+    return save_news(card, f"{settings.output_dir}/{runid}/news_{template_key}", prefix="post")
+
+
+def news_caption(post: NewsPost, settings, opts, provider=None) -> str:
+    prov = provider if provider is not None else get_text_provider(settings, opts.provider)
+    if prov is not None:
+        try:
+            return prov.complete_text(_NEWS_CAPTION_SYSTEM, post.headline, max_tokens=300).strip()
+        except Exception:
+            pass
+    tag = "#anime #animenews #manga " + "#" + "".join(c for c in post.headline.lower() if c.isalnum())[:24]
+    return f"🚨 {post.headline}\n\n{tag}"
+
+
+def make_news_post(news: str, settings, opts: GenerateOptions | None = None,
+                   template_key: str | None = None, progress=None) -> NewsResult:
+    opts = opts or GenerateOptions()
+    prov = get_text_provider(settings, opts.provider)
+    provider_used = getattr(prov, "name", "none")
+    if progress:
+        progress(f"parsing the story (provider: {provider_used})")
+    post = parse_news_post(news, settings, provider=prov)
+    if not post.headline:
+        return NewsResult(post=post, warnings=["Couldn't read a headline."],
+                          provider_used=provider_used)
+    if post.items and not post.body:          # surface list items in the editable body
+        post.body = "\n".join(str(x) for x in post.items)
+    if opts.date_text and not post.date_text:
+        post.date_text = opts.date_text
+
+    warnings = _resolve_post_art(post, settings, opts, prov, progress)
+    runid = time.strftime("%Y%m%d-%H%M%S")
+    key = template_key or DEFAULT_NEWS
+    if progress:
+        progress("rendering the post…")
+    cards = render_news_one(post, settings, opts, key, runid)
+    res = NewsResult(post=post, runid=runid, provider_used=provider_used, warnings=warnings,
+                     current={"key": key, "name": _NEWS_NAME.get(key, key), "cards": cards})
+    if opts.write_caption:
+        res.caption = news_caption(post, settings, opts, provider=prov)
+    try:
+        from . import enhance
+        res.capabilities = enhance.capabilities()
+    except Exception:
+        res.capabilities = {}
+    return res
+
+
+def render_news_from_post(post: NewsPost, settings, opts: GenerateOptions, runid: str,
+                          template_key: str) -> NewsResult:
+    """Re-render a (possibly edited) post into a template — re-resolves art."""
+    prov = get_text_provider(settings, opts.provider)
+    warnings = _resolve_post_art(post, settings, opts, prov, None)
+    cards = render_news_one(post, settings, opts, template_key, runid)
+    return NewsResult(post=post, runid=runid, warnings=warnings,
+                      provider_used=getattr(prov, "name", "none"),
+                      current={"key": template_key, "name": _NEWS_NAME.get(template_key, template_key), "cards": cards})
 
 
 # ---- single-style helpers (CLI / back-compat) ----------------------------

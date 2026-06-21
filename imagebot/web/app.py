@@ -15,13 +15,16 @@ from flask import (Flask, jsonify, render_template, request,
 
 from ..config import get_settings
 from ..image_search import CACHE_DIR
-from ..models import Panel
-from ..pipeline import (GenerateOptions, make_variants, build_carousel, render_one)
+from ..models import Panel, NewsPost
+from ..pipeline import (GenerateOptions, make_variants, build_carousel, render_one,
+                        make_news_post, render_news_one, render_news_from_post)
 from ..styles import all_styles
+from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
 from .. import logos
 
 ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_STYLE = all_styles()[0].key
+NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
 
 
 def _bool(v, default=False):
@@ -81,6 +84,19 @@ def create_app(settings=None) -> Flask:
             "capabilities": res.capabilities,
         }
 
+    def news_json(res):
+        cur = res.current
+        return {
+            "ok": True, "mode": "news", "runid": res.runid,
+            "provider_used": res.provider_used,
+            "post": res.post.to_dict(),
+            "styles": news_templates(),
+            "current": ({"key": cur["key"], "name": cur["name"],
+                         "cards": [file_url(c) for c in cur["cards"]]} if cur else None),
+            "caption": res.caption, "warnings": res.warnings, "log": res.log,
+            "capabilities": res.capabilities,
+        }
+
     def _capabilities():
         try:
             from .. import enhance
@@ -110,10 +126,16 @@ def create_app(settings=None) -> Flask:
         news = (data.get("news") or "").strip()
         if not news:
             return jsonify(ok=False, error="Please paste some news text."), 400
+        log: list[str] = []
+        if data.get("mode") == "news":
+            current = data.get("style") or DEFAULT_NEWS
+            res = make_news_post(news, settings, _opts_from(data),
+                                 template_key=current, progress=log.append)
+            res.log = log
+            return jsonify(news_json(res))
         current = data.get("style") or DEFAULT_STYLE
         opts = _opts_from(data)
         opts.styles = [current]
-        log: list[str] = []
         res = make_variants(settings, opts, news=news, progress=log.append)
         res.log = log
         return jsonify(gen_json(res, current))
@@ -122,6 +144,14 @@ def create_app(settings=None) -> Flask:
     @app.post("/render")
     def render():
         data = request.get_json(silent=True) or {}
+        if data.get("mode") == "news":
+            post = NewsPost.from_dict(data.get("post", {}))
+            if not post.headline:
+                return jsonify(ok=False, error="No headline."), 400
+            runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+            style = data.get("style") or DEFAULT_NEWS
+            res = render_news_from_post(post, settings, _opts_from(data), runid, style)
+            return jsonify(news_json(res))
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         if not panels:
             return jsonify(ok=False, error="No panels to render."), 400
@@ -137,8 +167,16 @@ def create_app(settings=None) -> Flask:
     @app.post("/render_one")
     def render_one_route():
         data = request.get_json(silent=True) or {}
-        panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        if data.get("mode") == "news":
+            post = NewsPost.from_dict(data.get("post", {}))
+            if not post.headline:
+                return jsonify(ok=False, error="Nothing to render."), 400
+            style = data.get("style") or DEFAULT_NEWS
+            cards = render_news_one(post, settings, _opts_from(data), style, runid)
+            return jsonify(ok=True, mode="news", key=style, name=NEWS_NAME.get(style, style),
+                           runid=runid, cards=[file_url(c) for c in cards])
+        panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
         style = data.get("style") or DEFAULT_STYLE
         if not panels:
             return jsonify(ok=False, error="Nothing to render."), 400

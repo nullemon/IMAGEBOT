@@ -102,6 +102,13 @@ button.small{width:auto;padding:9px 14px}
 .sel-card img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
 .sel-card .dl{display:inline-block;margin-top:7px;font-size:.85rem}
 
+/* mode toggle */
+.mode-toggle{display:flex;gap:14px}
+.mode-toggle label{display:flex;align-items:center;gap:6px;color:var(--text);font-size:.85rem}
+.mode-toggle input{width:auto;margin:0}
+#news-fields .opts{margin-top:12px}
+#news-fields label{display:block;margin-top:10px}
+
 /* template chips */
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--text);

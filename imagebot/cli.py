@@ -59,6 +59,42 @@ def _cmd_make(args) -> int:
     return 0
 
 
+def _cmd_news(args) -> int:
+    settings = get_settings()
+    if args.file:
+        news = open(args.file, "r", encoding="utf-8").read()
+    elif args.news:
+        news = args.news
+    else:
+        news = sys.stdin.read()
+    if not news.strip():
+        print("No news provided (use --news, --file, or stdin).", file=sys.stderr)
+        return 2
+    from .pipeline import make_news_post, render_news_one
+    from .newscard import NEWS_TEMPLATES
+    opts = GenerateOptions(
+        provider=args.provider, event_name=args.event, watermark=args.watermark,
+        date_text=args.date, find_art=not args.no_art, vision_pick=not args.no_vision,
+        clean_art=args.clean, ai_fallback=args.ai_art, write_caption=not args.no_caption,
+    )
+    res = make_news_post(news, settings, opts, template_key=args.template,
+                         progress=lambda m: print("  ·", m))
+    print("\nHeadline:", res.post.headline)
+    print("Category:", res.post.category, "| date:", res.post.date_text or "—", "| run:", res.runid)
+    for w in res.warnings:
+        print("  ⚠", w)
+    if res.current:
+        print("Post:", res.current["cards"][0])
+    if args.all_templates:
+        print("\nAll templates:")
+        for k, n, _ in NEWS_TEMPLATES:
+            p = render_news_one(res.post, settings, opts, k, res.runid)
+            print(f"  → {n:16} {p[0]}")
+    if res.caption:
+        print("\nCaption:\n" + res.caption)
+    return 0
+
+
 def _cmd_web(args) -> int:
     from .web import create_app
     settings = get_settings()
@@ -92,6 +128,22 @@ def main(argv=None) -> int:
     m.add_argument("--ai-art", action="store_true", help="AI-generate art when none found")
     m.add_argument("--no-caption", action="store_true", help="don't write a caption")
     m.set_defaults(func=_cmd_make)
+
+    nw = sub.add_parser("news", help="make a single-story news post")
+    nw.add_argument("--news", help="the news story")
+    nw.add_argument("--file", help="read the story from a file")
+    nw.add_argument("--provider", choices=["claude", "openai", "gemini", "grok", "auto", "none"], default=None)
+    nw.add_argument("--template", default="bottom", help="news template key (default: bottom)")
+    nw.add_argument("--all-templates", action="store_true", help="render every news template")
+    nw.add_argument("--event", default=None)
+    nw.add_argument("--watermark", default=None)
+    nw.add_argument("--date", default=None)
+    nw.add_argument("--no-art", action="store_true")
+    nw.add_argument("--no-vision", action="store_true")
+    nw.add_argument("--clean", action="store_true")
+    nw.add_argument("--ai-art", action="store_true")
+    nw.add_argument("--no-caption", action="store_true")
+    nw.set_defaults(func=_cmd_news)
 
     w = sub.add_parser("web", help="launch the web UI")
     w.add_argument("--host", default="127.0.0.1")

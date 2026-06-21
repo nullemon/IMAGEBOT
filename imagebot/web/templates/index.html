@@ -24,7 +24,13 @@
 
   <!-- 1 · INPUT -->
   <section class="panel wide">
-    <h2>1 · Paste your news</h2>
+    <div class="row-between">
+      <h2>1 · Paste your news</h2>
+      <div class="mode-toggle">
+        <label><input type="radio" name="mode" value="lineup" checked /> Line-up list</label>
+        <label><input type="radio" name="mode" value="news" /> News post</label>
+      </div>
+    </div>
     <div class="io">
       <textarea id="news" rows="6" placeholder="One announcement per line, e.g.
 Attack on Titan Season 4 new info — June 19
@@ -92,6 +98,28 @@ Solo Leveling Season 3 — July 4"></textarea>
     </div>
     <p class="hint">Edit any field, paste/upload art, or set a logo per series, then Apply. Template stays the one you picked.</p>
     <div id="panels" class="panels"></div>
+
+    <!-- news-post single-story editor -->
+    <div id="news-fields" class="hidden">
+      <label>Headline<textarea data-n="headline" rows="2"></textarea></label>
+      <div class="opts">
+        <label>Category<input data-n="category" placeholder="NEWS / BREAKING / RELEASE DATE / RANKING" /></label>
+        <label>Source / handle<input data-n="source" placeholder="@youraccount" /></label>
+        <label>Date<input data-n="date_text" placeholder="e.g. JULY 4" /></label>
+        <label>Theme
+          <select data-n="theme"><option value="auto">auto</option>
+            {% for t in themes %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+        </label>
+      </div>
+      <label>Sub-text / list items (one per line, for List/Ranking)<textarea data-n="body" rows="3"></textarea></label>
+      <div class="prow-art">
+        <label class="grow">Search query<input data-n="query" /></label>
+        <label class="grow">Image URL<input data-n="image_url" placeholder="direct link to override search" /></label>
+        <input type="hidden" data-n="image_path" />
+        <label class="upload">Art<input type="file" accept="image/*" id="news-art" /></label>
+        <span id="news-art-state" class="art-state"></span>
+      </div>
+    </div>
   </section>
 
   <template id="panel-row">

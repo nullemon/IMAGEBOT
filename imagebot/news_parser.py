@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from .models import Panel
+from .models import Panel, NewsPost
 from .providers import get_text_provider
 
 _MONTHS = ("january february march april may june july august september "
@@ -149,6 +149,71 @@ def _clean_title(s: str) -> str:
         s = re.sub(r"\s{2,}", " ", s).strip()
     s = re.sub(r"\s{2,}", " ", s)
     return s.strip(" -–—:|•,\t")
+
+
+NEWS_POST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string", "description": "a punchy news sentence (sentence case, not ALL CAPS)"},
+        "body": {"type": "string", "description": "optional one-line sub-text"},
+        "category": {"type": "string", "description": "NEWS / BREAKING / RELEASE DATE / RANKING / TRAILER / NEW SEASON / MANGA"},
+        "source": {"type": "string", "description": "a handle if present, else empty"},
+        "date_text": {"type": "string", "description": "short date in CAPS, e.g. JULY 4, or empty"},
+        "query": {"type": "string", "description": "best Google Images query for the key visual"},
+        "items": {"type": "array", "items": {"type": "string"}, "description": "list entries if this is a ranking/list, else empty"},
+    },
+    "required": ["headline"],
+    "additionalProperties": False,
+}
+
+_NEWS_SYSTEM = """You are an editor for an anime-news Instagram page. Turn the \
+user's note into ONE news post.
+- headline: a clear, punchy news sentence (sentence case, not ALL CAPS).
+- category: a short label — NEWS, BREAKING, RELEASE DATE, RANKING, TRAILER, \
+NEW SEASON, MANGA, etc. Infer it.
+- source: a handle/source if present, else "".
+- date_text: a SHORT date in CAPS like "JULY 4" if present, else "".
+- query: the best Google Images search for the key visual (add "anime key visual").
+- items: if it's a ranking/list, the entries in order; otherwise [].
+Return JSON only."""
+
+
+def parse_news_post(text: str, settings, provider=None) -> NewsPost:
+    text = (text or "").strip()
+    if not text:
+        return NewsPost(headline="")
+    prov = provider if provider is not None else get_text_provider(settings)
+    if prov is not None:
+        try:
+            data = prov.complete_json(_NEWS_SYSTEM, f"Note:\n\n{text}", NEWS_POST_SCHEMA)
+            if isinstance(data, dict) and data.get("headline"):
+                return NewsPost.from_dict(data)
+        except Exception:
+            pass
+    return _heuristic_news_post(text)
+
+
+def _heuristic_news_post(text: str) -> NewsPost:
+    lines = [l.strip(" -–—•\t") for l in text.splitlines() if l.strip()]
+    headline = lines[0] if lines else text
+    items = lines[1:] if len(lines) > 1 else []
+    low = text.lower()
+    category = "NEWS"
+    for kw, cat in (("breaking", "BREAKING"), ("release date", "RELEASE DATE"),
+                    ("releases", "RELEASE DATE"), ("trailer", "TRAILER"), ("pv", "TRAILER"),
+                    ("top ", "RANKING"), ("ranking", "RANKING"), ("best ", "RANKING"),
+                    ("manga", "MANGA"), ("new season", "NEW SEASON"), ("season", "NEW SEASON")):
+        if kw in low:
+            category = cat
+            break
+    return NewsPost(
+        headline=headline,
+        category=category,
+        date_text=_extract_date(text),
+        items=items if category == "RANKING" else [],
+        body="" if category == "RANKING" else " ".join(items),
+        query=f"{headline} anime key visual",
+    )
 
 
 def _heuristic_parse(text: str, default_tag_sub: str, max_panels: int) -> list[Panel]:

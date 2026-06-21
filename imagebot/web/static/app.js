@@ -3,11 +3,15 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FIELDS = ["title", "subtitle", "tag_main", "tag_sub", "date_text",
   "logo_style", "theme", "query", "image_url", "image_path", "logo_path"];
+const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
+  "theme", "query", "image_url", "image_path"];
 
-let STATE = { runid: "", styles: [], current: "", lastCards: [] };
+let STATE = { mode: "lineup", runid: "", styles: [], current: "" };
 
+const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || "lineup";
 function options() {
   return {
+    mode: mode(),
     provider: $("#provider").value,
     panels_per_card: $("#panels_per_card").value,
     event_name: $("#event_name").value,
@@ -43,49 +47,46 @@ function buildChips() {
   const box = $("#templates"); box.innerHTML = ""; box.classList.remove("hidden");
   STATE.styles.forEach((st) => {
     const c = document.createElement("button");
-    c.className = "chip"; c.type = "button"; c.dataset.key = st.key;
-    c.textContent = st.name;
+    c.className = "chip"; c.type = "button"; c.dataset.key = st.key; c.textContent = st.name;
     c.classList.toggle("active", st.key === STATE.current);
     c.addEventListener("click", () => switchTemplate(st.key));
     box.appendChild(c);
   });
 }
-function markActive() {
-  $$("#templates .chip").forEach((c) => c.classList.toggle("active", c.dataset.key === STATE.current));
-}
+const markActive = () => $$("#templates .chip").forEach((c) => c.classList.toggle("active", c.dataset.key === STATE.current));
 
 async function switchTemplate(key) {
   STATE.current = key; markActive();
-  const pc = $("#preview-cards");
-  pc.style.opacity = "0.45";
+  const pc = $("#preview-cards"); pc.style.opacity = "0.45";
   try {
-    const d = await postJSON("/render_one", {
-      panels: collectPanels(), runid: STATE.runid, style: key, ...options(),
-    });
+    const payload = { runid: STATE.runid, style: key, ...options() };
+    if (STATE.mode === "news") payload.post = collectPost(); else payload.panels = collectPanels();
+    const d = await postJSON("/render_one", payload);
     showCurrent(d);
   } catch (e) { setBusy(false, "Error: " + e.message); }
   pc.style.opacity = "1";
 }
-
 function showCurrent(d) {
-  STATE.current = d.key; STATE.lastCards = d.cards; if (d.runid) STATE.runid = d.runid;
+  STATE.current = d.key; if (d.runid) STATE.runid = d.runid;
   $("#preview-wrap").classList.remove("hidden");
   $("#cur-name").textContent = d.name;
   const pc = $("#preview-cards"); pc.innerHTML = "";
   d.cards.forEach((src, i) => {
     const div = document.createElement("div"); div.className = "sel-card";
-    div.innerHTML = `<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${d.key}_${i + 1}.png">⬇ download card ${i + 1}</a>`;
+    div.innerHTML = `<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${d.key}_${i + 1}.png">⬇ download</a>`;
     pc.appendChild(div);
   });
   markActive();
 }
 
-// ---- result wiring --------------------------------------------------------
+// ---- result ---------------------------------------------------------------
 function showResult(data) {
+  STATE.mode = data.mode || "lineup";
   STATE.runid = data.runid; STATE.styles = data.styles; STATE.current = data.current ? data.current.key : "";
   $("#empty").classList.add("hidden");
   $("#run-note").textContent = `run ${data.runid} · ${data.styles.length} templates · ${data.provider_used}`;
   $("#provider-note").textContent = "provider: " + data.provider_used;
+  $("#dl-zip").classList.toggle("hidden", STATE.mode === "news");
   buildChips();
 
   const w = $("#warnings"); w.innerHTML = "";
@@ -93,12 +94,29 @@ function showResult(data) {
   if (data.caption) { $("#caption-wrap").classList.remove("hidden"); $("#caption").value = data.caption; }
   if (data.current) showCurrent(data.current);
 
-  $("#panels").innerHTML = "";
-  (data.panels || []).forEach(addPanel);
   $("#editor").classList.remove("hidden");
+  if (STATE.mode === "news") {
+    $("#panels").classList.add("hidden"); $("#add-panel").classList.add("hidden");
+    $("#news-fields").classList.remove("hidden");
+    populateNews(data.post || {});
+  } else {
+    $("#news-fields").classList.add("hidden");
+    $("#panels").classList.remove("hidden"); $("#add-panel").classList.remove("hidden");
+    $("#panels").innerHTML = ""; (data.panels || []).forEach(addPanel);
+  }
 }
 
-// ---- editable panels ------------------------------------------------------
+// ---- news editor ----------------------------------------------------------
+function populateNews(post) {
+  NEWS_FIELDS.forEach((f) => { const el = $(`[data-n="${f}"]`); if (el) el.value = post[f] || ""; });
+  $("#news-art-state").textContent = post.image_path ? "✓ art set" : "";
+}
+function collectPost() {
+  const p = {}; NEWS_FIELDS.forEach((f) => { const el = $(`[data-n="${f}"]`); if (el) p[f] = el.value; });
+  return p;
+}
+
+// ---- lineup editor --------------------------------------------------------
 function buildRow(panel) {
   const row = $("#panel-row").content.cloneNode(true).querySelector(".prow");
   FIELDS.forEach((f) => { const el = row.querySelector(`[data-f="${f}"]`); if (el) el.value = panel[f] || ""; });
@@ -107,10 +125,10 @@ function buildRow(panel) {
     row.remove(); if (!$$(".prow").length) $("#editor").classList.add("hidden");
   });
   row.querySelector(".art-file").addEventListener("change", (e) =>
-    uploadFile("/upload", e.target.files[0], {}, row, "image_path", "✓ custom art"));
+    uploadFile("/upload", e.target.files[0], {}, row.querySelector(".art-state"), row.querySelector('[data-f="image_path"]'), "✓ custom art"));
   row.querySelector(".logo-file").addEventListener("change", (e) =>
-    uploadFile("/upload_logo", e.target.files[0],
-      { title: row.querySelector('[data-f="title"]').value }, row, "logo_path", "✓ logo"));
+    uploadFile("/upload_logo", e.target.files[0], { title: row.querySelector('[data-f="title"]').value },
+      row.querySelector(".art-state"), row.querySelector('[data-f="logo_path"]'), "✓ logo"));
   row.querySelector(".find-logo").addEventListener("click", async () => {
     const title = row.querySelector('[data-f="title"]').value.trim(); if (!title) return;
     const state = row.querySelector(".art-state"); state.textContent = "searching logo…";
@@ -121,19 +139,18 @@ function buildRow(panel) {
   });
   return row;
 }
-async function uploadFile(url, file, extra, row, field, okMsg) {
+async function uploadFile(url, file, extra, stateEl, targetEl, okMsg) {
   if (!file) return;
-  const state = row.querySelector(".art-state"); state.textContent = "uploading…";
+  stateEl.textContent = "uploading…";
   const fd = new FormData(); fd.append("file", file);
   Object.entries(extra).forEach(([k, v]) => fd.append(k, v));
   try {
     const r = await fetch(url, { method: "POST", body: fd });
     const d = await r.json(); if (!d.ok) throw new Error(d.error);
-    row.querySelector(`[data-f="${field}"]`).value = d.image_path || d.logo_path;
-    state.textContent = okMsg;
-  } catch (e) { state.textContent = "upload failed"; }
+    targetEl.value = d.image_path || d.logo_path; stateEl.textContent = okMsg;
+  } catch (e) { stateEl.textContent = "upload failed"; }
 }
-function addPanel(panel = { title: "" }) { $("#panels").appendChild(buildRow(panel)); $("#editor").classList.remove("hidden"); }
+function addPanel(panel = { title: "" }) { $("#panels").appendChild(buildRow(panel)); }
 function collectPanels() {
   return $$(".prow").map((row) => {
     const p = {}; FIELDS.forEach((f) => { const el = row.querySelector(`[data-f="${f}"]`); if (el) p[f] = el.value; });
@@ -151,11 +168,13 @@ async function generate() {
 }
 async function applyEdits() {
   setBusy(true, "Applying edits & refreshing art…");
-  try { const d = await postJSON("/render", { panels: collectPanels(), style: STATE.current, ...options() }); showResult(d); setBusy(false, (d.log || []).join("\n")); }
+  const payload = { style: STATE.current, runid: STATE.runid, ...options() };
+  if (STATE.mode === "news") payload.post = collectPost(); else payload.panels = collectPanels();
+  try { const d = await postJSON("/render", payload); showResult(d); setBusy(false, (d.log || []).join("\n")); }
   catch (e) { setBusy(false, "Error: " + e.message); }
 }
 async function downloadZip() {
-  if (!STATE.current) return;
+  if (!STATE.current || STATE.mode === "news") return;
   setBusy(true, "Building carousel…");
   try {
     const d = await postJSON("/carousel", { panels: collectPanels(), runid: STATE.runid, style: STATE.current, cover: $("#cover").checked, ...options() });
@@ -165,12 +184,25 @@ async function downloadZip() {
   } catch (e) { setBusy(false, "Error: " + e.message); }
 }
 
+function onModeChange() {
+  const m = mode();
+  $("#news").placeholder = m === "news"
+    ? "Paste one news story, e.g.\nAttack on Titan Final Season gets a new trailer at Anime Expo — out July 4"
+    : "One announcement per line, e.g.\nAttack on Titan Season 4 new info — June 19\nJujutsu Kaisen movie — July 3";
+  ["#templates", "#preview-wrap", "#editor"].forEach((s) => $(s).classList.add("hidden"));
+  $("#empty").classList.remove("hidden");
+}
+
+$$('input[name=mode]').forEach((r) => r.addEventListener("change", onModeChange));
 $("#generate").addEventListener("click", generate);
 $("#rerender").addEventListener("click", applyEdits);
 $("#add-panel").addEventListener("click", () => addPanel());
 $("#dl-zip").addEventListener("click", downloadZip);
+$("#news-art")?.addEventListener("change", (e) =>
+  uploadFile("/upload", e.target.files[0], {}, $("#news-art-state"), $('[data-n="image_path"]'), "✓ art set"));
 $("#copy-caption").addEventListener("click", () => {
   navigator.clipboard.writeText($("#caption").value);
   $("#copy-caption").textContent = "Copied!"; setTimeout(() => ($("#copy-caption").textContent = "Copy"), 1500);
 });
 $("#news").addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); });
+onModeChange();

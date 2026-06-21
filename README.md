@@ -5,6 +5,9 @@ pick from, in the “ANIME EXPO” line-up look: stacked panels with the series 
 a logo, status pills (`SEASON 4` · `NEW INFO`), the event wordmark, and a big
 date — plus an auto-written caption and one-click **carousel export**.
 
+Two modes: **line-up lists** (multi-series carousels) and **single-story news posts**
+(the format the big anime-news IG/FB pages use).
+
 Runs **locally**. On an Ubuntu box with a GPU it also does background cut-outs,
 AI upscaling, OCR watermark clean-up, and local Stable-Diffusion art.
 
@@ -21,6 +24,14 @@ One generate makes your card; then **click any of 31 templates to swap your news
 A few of the distinct layouts up close:
 
 ![layouts](samples/preview_newlayouts.png)
+
+### …or single-story news posts
+Switch to **News post** mode for one story per image — a wrapped headline, category
+badge, source handle and date. 16 templates: Bottom Headline, Breaking News, Release
+Date, Lower Third, Quote, Top Bar, Centered, Magazine, Split, Minimal, Side Bar,
+Ticker, Poster, Date Stamp, Framed, and List/Ranking.
+
+![news templates](samples/preview_news.png)
 
 ---
 
@@ -134,6 +145,9 @@ python -m imagebot make --file news.txt --style noir --carousel --clean --find-l
 # fast preview, no search
 python -m imagebot make --news "..." --no-art --style classic
 
+# a single-story news post (16 templates; --all-templates for every one)
+python -m imagebot news --news "Solo Leveling S3 confirmed, premieres July 4" --template breaking
+
 python -m imagebot web --port 8080     # launch the UI
 ```
 
@@ -148,6 +162,7 @@ python -m imagebot web --port 8080     # launch the UI
 imagebot/
   styles.py         31 curated Style presets (+ 17 distinct layouts) (the gallery you pick from)
   compositor.py     Pillow engine — backgrounds, scrims, effects, logos, dates, cover
+  newscard.py       16 single-story news-post templates (wrapped headlines)
   enhance.py        OPTIONAL GPU: rembg cutout · Real-ESRGAN upscale · OCR · LaMa inpaint
   logos.py          local logo library + upload + auto search/download
   news_parser.py    news text -> structured Panels (LLM, rule-based fallback)
