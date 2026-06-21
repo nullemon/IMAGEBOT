@@ -31,9 +31,12 @@ class Style:
     glow: bool = False          # soft glow behind a cutout subject
     bars: int = 0               # cinematic letterbox bar height (px, full card)
     # ---- layout ---------------------------------------------------------
-    logo_align: str = "left"    # left | center
-    date_pos: str = "right"     # right | bottom | corner | none
-    pill_pos: str = "under"     # under | top
+    # how the words are arranged:
+    # classic | center | mirror | sidebar | bottombar | lowerthird | badge
+    layout: str = "classic"
+    logo_align: str = "left"    # (legacy, unused by the layout system)
+    date_pos: str = "right"
+    pill_pos: str = "under"
     # ---- type / colour --------------------------------------------------
     title_role: str = "auto"    # auto (use panel.logo_style) | sans | serif | heavy
     accent_mode: str = "theme"  # theme | series | fixed
@@ -46,44 +49,56 @@ class Style:
 # 16 curated presets — deterministic, distinct, all production-ready.
 # ---------------------------------------------------------------------------
 STYLE_PRESETS: list[Style] = [
-    Style("classic", "Classic Expo"),
-    Style("spotlight", "Cutout Spotlight", bg="art_cutout", darken=20,
-          scrim_left=120, glow=True, vignette=0.35, accent_mode="series"),
-    Style("blur_focus", "Soft Focus", bg="art_blur_cutout", blur=18,
-          scrim_left=120, vignette=0.3, accent_mode="series"),
-    Style("duotone", "Duotone Punch", bg="art_duotone", duotone=("#10121f", "#ff5b6e"),
-          grain=0.10, accent="#ff5b6e", accent_mode="fixed", scrim_left=160),
-    Style("neon", "Neon Night", darken=55, tint="#5b2bff", tint_alpha=55,
-          glow=True, accent="#39e0ff", accent_mode="fixed", scrim_bottom=120,
-          title_role="heavy"),
-    Style("noir", "Noir", grayscale=True, darken=46, scrim_left=200,
-          accent="#f5f5f5", accent_mode="fixed", title_role="serif",
-          pill_light=(20, 20, 22), vignette=0.4),
-    Style("magazine", "Magazine", logo_align="center", date_pos="bottom",
-          pill_pos="top", scrim_bottom=150, scrim_left=90, title_role="serif",
+    Style("classic", "Classic Expo", layout="classic"),
+    Style("spotlight", "Cutout Spotlight", layout="lowerthird", bg="art_cutout",
+          darken=20, scrim_left=120, scrim_bottom=120, glow=True, vignette=0.3,
           accent_mode="series"),
-    Style("cinematic", "Cinematic Bars", bars=46, darken=42, scrim_left=140,
-          logo_align="center", grain=0.06, accent_mode="theme"),
-    Style("vaporwave", "Vaporwave", bg="art_duotone", duotone=("#241048", "#46f0d0"),
-          tint="#ff39a8", tint_alpha=40, grain=0.12, accent="#ff39a8",
-          accent_mode="fixed", scrim_left=150),
-    Style("mono", "Minimal Mono", darken=58, scrim_left=120, date_pos="corner",
-          accent="#ffffff", accent_mode="fixed", pill_light=(20, 20, 22),
-          title_role="sans"),
-    Style("pop", "Comic Pop", accent="#ffd23f", accent_mode="fixed",
-          title_role="heavy", scrim_left=170, divider=(0, 0, 0, 255)),
-    Style("sunset", "Sunset", tint="#ff7a3c", tint_alpha=70, scrim_bottom=120,
-          accent="#ffd23f", accent_mode="fixed", title_role="serif"),
-    Style("midnight", "Midnight", tint="#1d4ed8", tint_alpha=55, darken=46,
-          scrim_bottom=110, accent="#7cc0ff", accent_mode="fixed"),
-    Style("poster", "Poster Center", logo_align="center", date_pos="bottom",
-          pill_pos="top", scrim_bottom=170, title_role="heavy",
-          accent_mode="series"),
-    Style("grunge", "Grunge", grain=0.16, vignette=0.42, darken=46,
-          title_role="heavy", accent="#e23b4e", accent_mode="fixed",
+    Style("blur_focus", "Soft Focus", layout="center", bg="art_blur_cutout",
+          blur=18, scrim_bottom=140, vignette=0.3, accent_mode="series"),
+    Style("duotone", "Duotone Punch", layout="mirror", bg="art_duotone",
+          duotone=("#10121f", "#ff5b6e"), grain=0.10, accent="#ff5b6e",
+          accent_mode="fixed", scrim_left=120, scrim_right=120),
+    Style("neon", "Neon Night", layout="badge", darken=55, tint="#5b2bff",
+          tint_alpha=55, glow=True, accent="#39e0ff", accent_mode="fixed",
+          scrim_left=150, title_role="heavy"),
+    Style("noir", "Noir", layout="sidebar", grayscale=True, darken=20,
+          scrim_left=0, accent="#f5f5f5", accent_mode="fixed", title_role="serif",
+          pill_light=(20, 20, 22), vignette=0.35),
+    Style("magazine", "Magazine", layout="center", scrim_bottom=150,
+          scrim_left=90, title_role="serif", accent_mode="series"),
+    Style("cinematic", "Cinematic Bars", layout="bottombar", bars=46, darken=30,
+          scrim_left=0, grain=0.06, accent_mode="theme"),
+    Style("vaporwave", "Vaporwave", layout="badge", bg="art_duotone",
+          duotone=("#241048", "#46f0d0"), tint="#ff39a8", tint_alpha=40,
+          grain=0.12, accent="#ff39a8", accent_mode="fixed", scrim_left=150),
+    Style("mono", "Minimal Mono", layout="lowerthird", darken=46, scrim_left=120,
+          scrim_bottom=120, accent="#ffffff", accent_mode="fixed",
+          pill_light=(20, 20, 22), title_role="sans"),
+    Style("pop", "Comic Pop", layout="bottombar", accent="#ffd23f",
+          accent_mode="fixed", title_role="heavy", scrim_left=0,
+          divider=(0, 0, 0, 255)),
+    Style("sunset", "Sunset", layout="mirror", tint="#ff7a3c", tint_alpha=70,
+          scrim_left=110, scrim_right=110, accent="#ffd23f", accent_mode="fixed",
+          title_role="serif"),
+    Style("midnight", "Midnight", layout="sidebar", tint="#1d4ed8", tint_alpha=55,
+          darken=30, scrim_left=0, accent="#7cc0ff", accent_mode="fixed"),
+    Style("poster", "Poster Center", layout="center", scrim_bottom=170,
+          title_role="heavy", accent_mode="series"),
+    Style("grunge", "Grunge", layout="classic", grain=0.16, vignette=0.42,
+          darken=46, title_role="heavy", accent="#e23b4e", accent_mode="fixed",
           scrim_left=180),
-    Style("festival", "Festival", accent_mode="series", scrim_bottom=140,
-          date_pos="bottom", pill_pos="top", tint="", title_role="sans"),
+    Style("festival", "Festival", layout="bottombar", accent_mode="series",
+          scrim_left=0, title_role="sans"),
+    # --- extra looks that lean into the distinct layouts ---
+    Style("editorial", "Editorial", layout="sidebar", scrim_left=0,
+          title_role="serif", accent_mode="series"),
+    Style("headline", "Headline", layout="bottombar", scrim_left=0,
+          title_role="heavy", accent="#ff4d5e", accent_mode="fixed"),
+    Style("sticker", "Sticker", layout="badge", scrim_left=160,
+          accent="#19c37d", accent_mode="fixed", title_role="heavy"),
+    Style("split", "Split", layout="mirror", bg="art_duotone",
+          duotone=("#101225", "#ffb020"), scrim_left=120, scrim_right=120,
+          accent="#ffb020", accent_mode="fixed"),
 ]
 
 _BY_KEY = {s.key: s for s in STYLE_PRESETS}
