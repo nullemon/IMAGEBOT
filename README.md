@@ -71,6 +71,9 @@ ready-to-post PNGs (1080×1350) · caption · carousel .zip (with cover slide)
 - **Multiple AI providers** — Claude, ChatGPT, Gemini, Grok. Use one or all; with
   **no** key it still works (rule-based parser + keyless search).
 - **Carousel export** — a cover slide + the line-up cards, zipped, 1080×1350.
+- **Any size** — portrait 4:5 (feed), square 1:1, story/reel 9:16, or landscape 16:9.
+- **AI research prompt** — a built-in copy-paste prompt (also in [`PROMPTS.md`](PROMPTS.md))
+  makes any AI return news in the exact format IMAGEBOT reads, so you just paste it back.
 
 ---
 

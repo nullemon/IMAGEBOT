@@ -10,7 +10,7 @@ import argparse
 import sys
 
 from .config import get_settings
-from .pipeline import GenerateOptions, make_variants, build_carousel
+from .pipeline import GenerateOptions, make_variants, build_carousel, SIZES
 
 
 def _cmd_make(args) -> int:
@@ -26,8 +26,10 @@ def _cmd_make(args) -> int:
         return 2
 
     styles = None if args.all_styles else [args.style]
+    _w, _h = SIZES.get(args.size, SIZES["portrait"])
     opts = GenerateOptions(
         provider=args.provider,
+        width=_w, height=_h,
         panels_per_card=args.per,
         event_name=args.event,
         watermark=args.watermark,
@@ -72,8 +74,10 @@ def _cmd_news(args) -> int:
         return 2
     from .pipeline import make_news_post, render_news_one
     from .newscard import NEWS_TEMPLATES
+    _w, _h = SIZES.get(args.size, SIZES["portrait"])
     opts = GenerateOptions(
-        provider=args.provider, event_name=args.event, watermark=args.watermark,
+        provider=args.provider, width=_w, height=_h,
+        event_name=args.event, watermark=args.watermark,
         date_text=args.date, find_art=not args.no_art, vision_pick=not args.no_vision,
         clean_art=args.clean, ai_fallback=args.ai_art, write_caption=not args.no_caption,
     )
@@ -114,6 +118,7 @@ def main(argv=None) -> int:
     m.add_argument("--provider", choices=["claude", "openai", "gemini", "grok", "auto", "none"],
                    default=None, help="AI text provider (default: auto)")
     m.add_argument("--per", type=int, default=4, help="series per card image")
+    m.add_argument("--size", choices=list(SIZES), default="portrait", help="output size")
     m.add_argument("--event", default=None, help="event wordmark, e.g. 'ANIME EXPO'")
     m.add_argument("--watermark", default=None, help="center watermark text")
     m.add_argument("--date", default=None, help="apply this date to all panels")
@@ -134,6 +139,7 @@ def main(argv=None) -> int:
     nw.add_argument("--file", help="read the story from a file")
     nw.add_argument("--provider", choices=["claude", "openai", "gemini", "grok", "auto", "none"], default=None)
     nw.add_argument("--template", default="bottom", help="news template key (default: bottom)")
+    nw.add_argument("--size", choices=list(SIZES), default="portrait", help="output size")
     nw.add_argument("--all-templates", action="store_true", help="render every news template")
     nw.add_argument("--event", default=None)
     nw.add_argument("--watermark", default=None)

@@ -6,6 +6,37 @@ const FIELDS = ["title", "subtitle", "tag_main", "tag_sub", "date_text",
 const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
   "theme", "query", "image_url", "image_path"];
 
+const LINEUP_PROMPT = `You are an anime-news researcher. Find 6 of the latest, notable anime announcements. (Topic: leave blank for trending, or specify e.g. "Anime Expo 2026 announcements".)
+
+Output ONLY a plain list — one announcement per line, no numbering, no extra text — in this EXACT format:
+
+Title | STATUS | DATE
+
+Rules:
+- Title: the official English series name only.
+- STATUS: one of SEASON 4, MOVIE, NEW ARC, FINALE, NEW PV, NEW SERIES, GAME (pick the most fitting).
+- DATE: a short date like "JULY 4" if there is one; otherwise omit it (just "Title | STATUS").
+
+Example:
+Attack on Titan | SEASON 4 | JUNE 19
+Jujutsu Kaisen | MOVIE | JULY 3
+Chainsaw Man | NEW ARC`;
+
+const NEWS_PROMPT = `You are an anime-news editor. Find one notable, recent anime news story. (Topic: leave blank for trending, or specify e.g. "Attack on Titan".)
+
+Output ONLY these lines, nothing else:
+
+HEADLINE: <one punchy sentence, sentence case, no ALL CAPS>
+CATEGORY: <NEWS | BREAKING | RELEASE DATE | TRAILER | NEW SEASON | MANGA | RANKING>
+DATE: <short date like JULY 4, or leave blank>
+SOURCE: <official source or @handle if known, else leave blank>
+
+If it's a ranking / Top-list, also add:
+ITEMS:
+- first item
+- second item
+- third item`;
+
 let STATE = { mode: "lineup", runid: "", styles: [], current: "" };
 
 const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || "lineup";
@@ -22,6 +53,7 @@ function options() {
   return {
     mode: mode(),
     accounts: collectAccounts(),
+    size: ($("#size") || {}).value || "portrait",
     provider: $("#provider").value,
     panels_per_card: $("#panels_per_card").value,
     event_name: $("#event_name").value,
@@ -201,10 +233,16 @@ function onModeChange() {
   $("#news").placeholder = m === "news"
     ? "Paste one news story, e.g.\nAttack on Titan Final Season gets a new trailer at Anime Expo — out July 4"
     : "One announcement per line, e.g.\nAttack on Titan Season 4 new info — June 19\nJujutsu Kaisen movie — July 3";
+  $("#ai-prompt").value = m === "news" ? NEWS_PROMPT : LINEUP_PROMPT;
   ["#templates", "#preview-wrap", "#editor"].forEach((s) => $(s).classList.add("hidden"));
   $("#empty").classList.remove("hidden");
 }
 
+$("#copy-prompt").addEventListener("click", () => {
+  navigator.clipboard.writeText($("#ai-prompt").value);
+  const b = $("#copy-prompt"); b.textContent = "Copied!";
+  setTimeout(() => (b.textContent = "Copy prompt"), 1500);
+});
 $$('input[name=mode]').forEach((r) => r.addEventListener("change", onModeChange));
 $("#generate").addEventListener("click", generate);
 $("#rerender").addEventListener("click", applyEdits);

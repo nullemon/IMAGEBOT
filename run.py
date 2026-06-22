@@ -10,7 +10,9 @@ For command-line (no browser) use:  python -m imagebot make --help
 from __future__ import annotations
 
 import argparse
+import os
 import socket
+import sys
 import webbrowser
 
 from imagebot.config import get_settings
@@ -49,11 +51,15 @@ def main() -> None:
           + (f"   (available: {', '.join(provs)})" if provs else "   (no keys — rule-based parser)"))
     print(f"  Output folder    : {settings.output_dir}/\n")
 
-    if not args.no_browser:
+    # auto-open only where a browser actually exists (skip headless WSL/servers,
+    # where xdg-open just spews "not found")
+    if not args.no_browser and (sys.platform in ("darwin", "win32") or os.environ.get("DISPLAY")):
         try:
             webbrowser.open(url)
         except Exception:
             pass
+    else:
+        print(f"  Open {url} in your browser  (WSL: use http://localhost:{port} on Windows)\n")
     app = create_app(settings)
     app.run(host=args.host, port=port, debug=args.debug, threaded=True)
 

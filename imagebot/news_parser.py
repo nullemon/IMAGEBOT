@@ -194,6 +194,27 @@ def parse_news_post(text: str, settings, provider=None) -> NewsPost:
 
 
 def _heuristic_news_post(text: str) -> NewsPost:
+    # structured "HEADLINE: ... / CATEGORY: ... / DATE: ... / SOURCE: ... / ITEMS:"
+    labels = {k.lower(): v for k, v in
+              re.findall(r"(?im)^\s*(headline|category|date|source)\s*:\s*(.+?)\s*$", text)}
+    if labels.get("headline"):
+        items = []
+        m = re.search(r"(?ims)^\s*items?\s*:\s*\n(.+)$", text)
+        if m:
+            for ln in m.group(1).splitlines():
+                ln = ln.strip(" -*•\t").lstrip("0123456789.").strip()
+                if ln:
+                    items.append(ln)
+        return NewsPost(
+            headline=labels["headline"],
+            category=(labels.get("category") or "NEWS").upper(),
+            date_text=(labels.get("date") or "").upper(),
+            source=labels.get("source") or "",
+            items=items,
+            body="\n".join(items),
+            query=f"{labels['headline']} anime key visual",
+        )
+
     lines = [l.strip(" -–—•\t") for l in text.splitlines() if l.strip()]
     headline = lines[0] if lines else text
     items = lines[1:] if len(lines) > 1 else []
@@ -230,12 +251,20 @@ def _heuristic_parse(text: str, default_tag_sub: str, max_panels: int) -> list[P
 
     panels: list[Panel] = []
     for line in items[:max_panels]:
-        title = _clean_title(line) or line
+        if "|" in line:                       # structured "Title | STATUS | DATE"
+            parts = [p.strip() for p in line.split("|")]
+            title = parts[0] or line
+            status = (parts[1].upper() if len(parts) > 1 and parts[1] else _extract_tag(line))
+            date = parts[2].upper() if len(parts) > 2 and parts[2] else ""
+        else:                                  # free text
+            title = _clean_title(line) or line
+            status = _extract_tag(line)
+            date = _extract_date(line)
         panels.append(Panel(
             title=title,
-            tag_main=_extract_tag(line),
+            tag_main=status or default_tag_sub,
             tag_sub=default_tag_sub,
-            date_text=_extract_date(line),
+            date_text=date,
             query=f"{title} anime key visual official art",
         ))
     return panels

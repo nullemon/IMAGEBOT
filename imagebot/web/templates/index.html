@@ -45,6 +45,14 @@ Solo Leveling Season 3 — July 4"></textarea>
               <option value="none">none (rule-based)</option>
             </select>
           </label>
+          <label>Size
+            <select id="size">
+              <option value="portrait">Portrait 4:5 · 1080×1350</option>
+              <option value="square">Square 1:1 · 1080×1080</option>
+              <option value="story">Story 9:16 · 1080×1920</option>
+              <option value="landscape">Landscape 16:9 · 1280×720</option>
+            </select>
+          </label>
           <label>Series / image<input id="panels_per_card" type="number" min="1" max="6" value="4" /></label>
           <label>Event name<input id="event_name" type="text" value="{{ brand.event_name }}" /></label>
           <label>Watermark<input id="watermark" type="text" value="{{ brand.watermark }}" /></label>
@@ -72,6 +80,14 @@ Solo Leveling Season 3 — July 4"></textarea>
         <button id="generate" class="primary">✦ Make my card</button>
       </div>
     </div>
+    <details class="prompt-help">
+      <summary>📋 AI research prompt — paste into ChatGPT/Claude to get news in this format</summary>
+      <div class="row-between">
+        <span class="muted">Copy this, fill the topic, run it, then paste the result above.</span>
+        <button id="copy-prompt" class="ghost small" type="button">Copy prompt</button>
+      </div>
+      <textarea id="ai-prompt" rows="12" readonly></textarea>
+    </details>
     <div id="status" class="status hidden"></div>
   </section>
 

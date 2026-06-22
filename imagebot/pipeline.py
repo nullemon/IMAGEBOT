@@ -21,6 +21,21 @@ _NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
 
 _FONTS = FontBook()
 
+# named output sizes for the UI / CLI
+SIZES = {
+    "portrait": (1080, 1350),   # 4:5 feed (default)
+    "square": (1080, 1080),     # 1:1 feed
+    "story": (1080, 1920),      # 9:16 stories/reels
+    "landscape": (1280, 720),   # 16:9
+}
+
+
+def _spec(settings, opts, **extra):
+    """A CardSpec honouring the chosen output size (opts.width/height)."""
+    extra.setdefault("width", opts.width or settings.card_width)
+    extra.setdefault("height", opts.height or settings.card_height)
+    return settings.card_spec(**extra)
+
 
 @dataclass
 class GenerateOptions:
@@ -39,6 +54,9 @@ class GenerateOptions:
     find_logo: bool = False             # auto search+download a transparent logo
     # accounts — render the post once per handle (max 4), each branded with its @username
     accounts: list = field(default_factory=list)   # [{handle, watermark, event_name, event_badge, accent}]
+    # output size (None -> settings default 1080x1350)
+    width: int | None = None
+    height: int | None = None
     # output
     styles: list[str] | None = None     # which style keys to render (None = all)
     write_caption: bool = True
@@ -168,7 +186,7 @@ def render_variants(panels: list[Panel], settings, opts: GenerateOptions,
     out = []
     for k in keys:
         style = get_style(k)
-        spec = settings.card_spec(panels_per_card=opts.panels_per_card)
+        spec = _spec(settings, opts, panels_per_card=opts.panels_per_card)
         spec.style = style
         _apply_brand(spec, opts)
         cards = render_cards(panels, spec, _FONTS)
@@ -254,7 +272,7 @@ def build_carousel(panels: list[Panel], settings, opts: GenerateOptions,
     opts = opts or GenerateOptions()
     style = get_style(style_key)
     b = account_brands(opts, settings)[0]
-    spec = settings.card_spec(panels_per_card=opts.panels_per_card)
+    spec = _spec(settings, opts, panels_per_card=opts.panels_per_card)
     spec.style = style
     _apply_account(spec, b)
     out_dir = Path(settings.output_dir) / runid / style.key / _slug(b["handle"] or b["watermark"])
@@ -282,7 +300,7 @@ def render_one(panels: list[Panel], settings, opts: GenerateOptions | None,
     style = get_style(style_key)
     outputs = []
     for b in account_brands(opts, settings):
-        spec = settings.card_spec(panels_per_card=opts.panels_per_card)
+        spec = _spec(settings, opts, panels_per_card=opts.panels_per_card)
         spec.style = style
         _apply_account(spec, b)
         sub = _slug(b["handle"] or b["watermark"])
@@ -380,7 +398,7 @@ def render_news_one(post: NewsPost, settings, opts: GenerateOptions | None,
     opts = opts or GenerateOptions()
     outputs = []
     for b in account_brands(opts, settings):
-        spec = settings.card_spec()
+        spec = _spec(settings, opts)
         _apply_account(spec, b)
         p = NewsPost.from_dict(post.to_dict())
         if b["handle"]:

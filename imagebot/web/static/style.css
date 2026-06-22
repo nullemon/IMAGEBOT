@@ -117,6 +117,12 @@ button.small{width:auto;padding:9px 14px}
 .chip-check input{width:auto;margin:0}
 .acc-label{font-size:.78rem;color:var(--accent);font-weight:700;margin-bottom:5px}
 
+/* AI prompt helper */
+.prompt-help{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel2)}
+.prompt-help summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+.prompt-help .row-between{margin:8px 0}
+.prompt-help textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem}
+
 /* template chips */
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--text);

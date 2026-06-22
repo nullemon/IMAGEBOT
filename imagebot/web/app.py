@@ -18,7 +18,7 @@ from ..image_search import CACHE_DIR
 from ..models import Panel, NewsPost
 from ..pipeline import (GenerateOptions, build_carousel, render_one,
                         prepare_lineup, prepare_news, render_news_one,
-                        render_news_from_post)
+                        render_news_from_post, SIZES)
 from ..styles import all_styles
 from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
 from .. import logos
@@ -39,8 +39,10 @@ def _bool(v, default=False):
 
 def _opts_from(data: dict) -> GenerateOptions:
     prov = data.get("provider")
+    w, h = SIZES.get(data.get("size") or "portrait", SIZES["portrait"])
     return GenerateOptions(
         provider=None if prov in (None, "", "auto") else prov,
+        width=w, height=h,
         panels_per_card=int(data.get("panels_per_card") or 4),
         watermark=data.get("watermark") if data.get("watermark") is not None else None,
         event_name=data.get("event_name") or None,
