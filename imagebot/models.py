@@ -21,6 +21,9 @@ class Panel:
     image_url: str = ""              # optional explicit art URL (skips search)
     logo_path: str = ""              # transparent PNG logo to overlay instead of text
     logo_scale: float = 1.0          # multiplier on the auto-fit logo size
+    focus_x: float = 0.6             # image pan X within the frame (0=left .. 1=right)
+    focus_y: float = 0.4             # image pan Y (0=top .. 1=bottom)
+    zoom: float = 1.0                # image zoom (1.0=fit the frame, >1 zooms in)
 
     def search_query(self) -> str:
         return (self.query or f"{self.title} anime key visual").strip()
@@ -37,8 +40,8 @@ class Panel:
 @dataclass
 class BrandConfig:
     """Account / event branding shown on every card."""
-    event_name: str = "ANIME EXPO"
-    event_badge: str = "AX"
+    event_name: str = ""        # right-side event wordmark; BLANK = don't show one
+    event_badge: str = ""       # small badge before the wordmark, e.g. "AX"
     watermark: str = "ANIME INSIDER"
     accent: str = "#F5A623"
     default_tag_sub: str = "NEW INFO"
@@ -71,6 +74,9 @@ class NewsPost:
     image_path: str = ""
     image_url: str = ""
     items: list = field(default_factory=list)   # for list / ranking posts
+    focus_x: float = 0.5             # image pan X (0=left .. 1=right)
+    focus_y: float = 0.4             # image pan Y (0=top .. 1=bottom)
+    zoom: float = 1.0                # image zoom (1.0=fit, >1 zooms in)
 
     def search_query(self) -> str:
         return (self.query or f"{self.headline} anime key visual").strip()

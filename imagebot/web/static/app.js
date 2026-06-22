@@ -2,9 +2,10 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FIELDS = ["title", "subtitle", "tag_main", "tag_sub", "date_text",
-  "logo_style", "theme", "query", "image_url", "image_path", "logo_path"];
+  "logo_style", "theme", "query", "image_url", "image_path", "logo_path",
+  "focus_x", "focus_y", "zoom"];
 const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
-  "theme", "query", "image_url", "image_path"];
+  "theme", "query", "image_url", "image_path", "focus_x", "focus_y", "zoom"];
 
 const LINEUP_PROMPT = `You are an anime-news researcher. Find 6 of the latest, notable anime announcements. (Topic: leave blank for trending, or specify e.g. "Anime Expo 2026 announcements".)
 
@@ -181,6 +182,9 @@ function buildRow(panel) {
       row.querySelector('[data-f="logo_path"]').value = d.logo_path; state.textContent = "✓ logo";
     } catch (e) { state.textContent = "no logo found"; }
   });
+  // move/zoom sliders -> instant re-render of the current template
+  row.querySelectorAll('input[type=range]').forEach((r) =>
+    r.addEventListener("change", () => { if (STATE.current) switchTemplate(STATE.current); }));
   return row;
 }
 async function uploadFile(url, file, extra, stateEl, targetEl, okMsg) {
@@ -250,6 +254,8 @@ $("#add-panel").addEventListener("click", () => addPanel());
 $("#dl-zip").addEventListener("click", downloadZip);
 $("#news-art")?.addEventListener("change", (e) =>
   uploadFile("/upload", e.target.files[0], {}, $("#news-art-state"), $('[data-n="image_path"]'), "✓ art set"));
+$$('#news-fields input[type=range]').forEach((r) =>
+  r.addEventListener("change", () => { if (STATE.current) switchTemplate(STATE.current); }));
 $("#copy-caption").addEventListener("click", () => {
   navigator.clipboard.writeText($("#caption").value);
   $("#copy-caption").textContent = "Copied!"; setTimeout(() => ($("#copy-caption").textContent = "Copy"), 1500);

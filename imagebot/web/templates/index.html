@@ -54,7 +54,7 @@ Solo Leveling Season 3 — July 4"></textarea>
             </select>
           </label>
           <label>Series / image<input id="panels_per_card" type="number" min="1" max="6" value="4" /></label>
-          <label>Event name<input id="event_name" type="text" value="{{ brand.event_name }}" /></label>
+          <label>Event name <small>(optional)</small><input id="event_name" type="text" value="{{ brand.event_name }}" placeholder="blank = none, e.g. ANIME EXPO" /></label>
           <label>Watermark<input id="watermark" type="text" value="{{ brand.watermark }}" /></label>
           <label>Force date<input id="date_text" type="text" placeholder="e.g. JULY 3" /></label>
           <label>Cover title<input id="cover_title" type="text" value="LINE-UP" /></label>
@@ -145,6 +145,12 @@ Solo Leveling Season 3 — July 4"></textarea>
         <label class="upload">Art<input type="file" accept="image/*" id="news-art" /></label>
         <span id="news-art-state" class="art-state"></span>
       </div>
+      <div class="prow-img">
+        <span class="adj-label">Move / zoom image:</span>
+        <label>↔ X<input data-n="focus_x" type="range" min="0" max="1" step="0.02" value="0.5" /></label>
+        <label>↕ Y<input data-n="focus_y" type="range" min="0" max="1" step="0.02" value="0.4" /></label>
+        <label>🔍 zoom<input data-n="zoom" type="range" min="1" max="2.5" step="0.05" value="1" /></label>
+      </div>
     </div>
   </section>
 
@@ -175,6 +181,12 @@ Solo Leveling Season 3 — July 4"></textarea>
         <button class="ghost find-logo" type="button">Find logo</button>
         <span class="art-state"></span>
         <button class="ghost danger remove" type="button">✕</button>
+      </div>
+      <div class="prow-img">
+        <span class="adj-label">Move / zoom image:</span>
+        <label>↔ X<input data-f="focus_x" type="range" min="0" max="1" step="0.02" value="0.6" /></label>
+        <label>↕ Y<input data-f="focus_y" type="range" min="0" max="1" step="0.02" value="0.4" /></label>
+        <label>🔍 zoom<input data-f="zoom" type="range" min="1" max="2.5" step="0.05" value="1" /></label>
       </div>
     </div>
   </template>

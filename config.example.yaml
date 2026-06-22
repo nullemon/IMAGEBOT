@@ -14,9 +14,10 @@ accounts:
   - {name: "Manga Hub",     handle: "@mangahub",     watermark: "MANGA HUB"}
 
 brand:
-  # Right-side event wordmark, like "ANIME EXPO" in the reference cards.
-  event_name: "ANIME EXPO"
-  event_badge: "AX"            # small square badge before the wordmark
+  # Right-side event wordmark. LEAVE BLANK for none (nothing is added unless you
+  # set it here or type it in the UI). For an event set e.g. event_name: "ANIME EXPO".
+  event_name: ""
+  event_badge: ""              # small badge before the wordmark, e.g. "AX"
   # Center watermark. Set to "" to disable.
   watermark: "ANIME INSIDER"
   # Default accent colour for the tag pills (hex). Each panel can override.

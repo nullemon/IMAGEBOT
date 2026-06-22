@@ -86,14 +86,27 @@ def vertical_gradient(w: int, h: int, top, bottom) -> Image.Image:
     return grad.resize((w, h)).convert("RGBA")
 
 
+def _f(v, default):
+    try:
+        return float(v)
+    except Exception:
+        return default
+
+
 def cover_resize(img: Image.Image, w: int, h: int,
-                 focus_x: float = 0.6, focus_y: float = 0.38) -> Image.Image:
+                 focus_x: float = 0.6, focus_y: float = 0.4,
+                 zoom: float = 1.0) -> Image.Image:
+    """Scale + crop to fill w x h. focus_x/y pan the crop (0..1); zoom (>=1)
+    enlarges the art within the frame."""
     img = img.convert("RGBA")
     iw, ih = img.size
-    scale = max(w / iw, h / ih)
-    nw, nh = max(1, int(iw * scale)), max(1, int(ih * scale))
+    z = max(1.0, _f(zoom, 1.0))
+    scale = max(w / iw, h / ih) * z
+    nw, nh = max(w, int(iw * scale)), max(h, int(ih * scale))
     img = img.resize((nw, nh), Image.LANCZOS)
-    left, top = int((nw - w) * focus_x), int((nh - h) * focus_y)
+    fx = min(1.0, max(0.0, _f(focus_x, 0.5)))
+    fy = min(1.0, max(0.0, _f(focus_y, 0.4)))
+    left, top = int((nw - w) * fx), int((nh - h) * fy)
     return img.crop((left, top, left + w, top + h))
 
 
@@ -230,7 +243,7 @@ def _build_background(panel, w, h, style: Style, theme, accent) -> Image.Image:
         if cut is not None:
             base = _styled_backdrop(w, h, theme, style)
             if style.bg == "art_blur_cutout" and art is not None:
-                bg = cover_resize(art, w, h).filter(ImageFilter.GaussianBlur(style.blur or 16))
+                bg = cover_resize(art, w, h, panel.focus_x, panel.focus_y, panel.zoom).filter(ImageFilter.GaussianBlur(style.blur or 16))
                 bg.alpha_composite(Image.new("RGBA", (w, h), (0, 0, 0, 70)))
                 base = bg
             if style.glow:
@@ -249,7 +262,7 @@ def _build_background(panel, w, h, style: Style, theme, accent) -> Image.Image:
         # no cutout available -> fall through to full-art with extra mood
 
     if art is not None:
-        base = cover_resize(art, w, h)
+        base = cover_resize(art, w, h, panel.focus_x, panel.focus_y, panel.zoom)
         if style.bg == "art_duotone" and style.duotone:
             base = duotone(base, hex_to_rgb(style.duotone[0]), hex_to_rgb(style.duotone[1]))
         elif style.grayscale:
@@ -367,18 +380,21 @@ class _Ctx:
 
 def _wordmark(ctx, anchor_x, off=0.14, small=False, align="right"):
     brand, draw, u = ctx.brand, ctx.draw, ctx.u
-    f = ctx.fonts.font("ui", max(14, int(u * (0.06 if small else 0.085))))
     badge = brand.event_badge.strip()
     name = brand.event_name.strip().upper()
-    bl, bt, br, bb = draw.textbbox((0, 0), name or "EXPO", font=f)
-    name_w, name_h = br - bl, bb - bt
+    if not (name or badge):          # no event set -> draw nothing
+        return
+    f = ctx.fonts.font("ui", max(14, int(u * (0.06 if small else 0.085))))
+    _, bt, _, bb = draw.textbbox((0, 0), name or badge, font=f)
+    name_h = bb - bt
+    name_w = (draw.textbbox((0, 0), name, font=f)[2] if name else 0)
     bp = int(name_h * 0.28)
     badge_w = 0
     if badge:
         x0, _, x1, _ = draw.textbbox((0, 0), badge, font=f)
         badge_w = (x1 - x0) + 2 * bp
     gap = int(name_h * 0.4)
-    group = badge_w + (gap if badge_w else 0) + name_w
+    group = badge_w + (gap if (badge_w and name) else 0) + name_w
     gx = {"right": anchor_x - group, "center": anchor_x - group // 2}.get(align, anchor_x)
     gy = ctx.cy0 + int(u * off)
     if badge:
@@ -387,7 +403,8 @@ def _wordmark(ctx, anchor_x, off=0.14, small=False, align="right"):
                                radius=int(bh * 0.18), fill=WHITE)
         draw_text(draw, (gx + bp, gy), badge, f, NEAR_BLACK, shadow=False)
         gx += badge_w + gap
-    draw_text(draw, (gx, gy), name, f, WHITE)
+    if name:
+        draw_text(draw, (gx, gy), name, f, WHITE)
 
 
 def _date(ctx, anchor_x, y, align="right", maxw=0.42, maxh=0.5, start=0.62):
@@ -769,11 +786,13 @@ def render_cover(panels: list[Panel], spec: CardSpec, fonts: FontBook | None = N
     apply_vignette(base, 0.35)
     d = ImageDraw.Draw(base)
 
-    # event wordmark, centered near the top
-    ev = (spec.brand.event_badge + "  " if spec.brand.event_badge else "") + spec.brand.event_name.upper()
-    ev_font = fonts.font("ui", int(W * 0.045))
-    l, t, r, b = d.textbbox((0, 0), ev, font=ev_font)
-    draw_text(d, ((W - (r - l)) // 2, int(H * 0.12)), ev, ev_font, WHITE)
+    # event wordmark, centered near the top (only if an event is set)
+    ev = ((spec.brand.event_badge + "  " if spec.brand.event_badge else "")
+          + spec.brand.event_name.upper()).strip()
+    if ev:
+        ev_font = fonts.font("ui", int(W * 0.045))
+        l, t, r, b = d.textbbox((0, 0), ev, font=ev_font)
+        draw_text(d, ((W - (r - l)) // 2, int(H * 0.12)), ev, ev_font, WHITE)
 
     # big title
     tf = fonts.fit(d, title.upper(), "date", int(W * 0.86), int(H * 0.2), start=int(H * 0.18))

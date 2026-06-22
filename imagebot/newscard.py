@@ -113,8 +113,10 @@ def _source(ctx, x, y, align="left", fill=(225, 225, 230)):
 
 def _wordmark_corner(ctx):
     brand = ctx.brand
+    txt = ((brand.event_badge + " " if brand.event_badge else "") + brand.event_name.upper()).strip()
+    if not txt:                      # no event set -> draw nothing
+        return
     f = ctx.fonts.font("ui", int(ctx.W * 0.03))
-    txt = (brand.event_badge + " " if brand.event_badge else "") + brand.event_name.upper()
     tw = ctx.draw.textlength(txt, font=f)
     draw_text(ctx.draw, (int(ctx.W - ctx.ml - tw), ctx.ml), txt, f, WHITE)
 
@@ -240,10 +242,11 @@ def _t_magazine(ctx):
     W, H, ml = ctx.W, ctx.H, ctx.ml
     _scrim_top(ctx, 0.4, 150)
     _scrim_bottom(ctx, 0.5, 220)
-    mast = (ctx.brand.event_name or "ANIME NEWS").upper()
-    mf = ctx.fonts.font("logo_serif", int(W * 0.075))
-    tw = ctx.draw.textlength(mast, font=mf)
-    draw_text(ctx.draw, (W // 2 - tw / 2, int(H * 0.05)), mast, mf, WHITE)
+    mast = (ctx.brand.event_name or ctx.brand.watermark or "").upper()
+    if mast:
+        mf = ctx.fonts.font("logo_serif", int(W * 0.075))
+        tw = ctx.draw.textlength(mast, font=mf)
+        draw_text(ctx.draw, (W // 2 - tw / 2, int(H * 0.05)), mast, mf, WHITE)
     f, lines, lh = fit_wrapped(ctx, ctx.post.headline, _headline_role(serif=True),
                                W - 2 * ml, int(H * 0.3), 4, int(W * 0.095))
     by = H - int(H * 0.08) - len(lines) * lh
@@ -469,13 +472,13 @@ def render_news(post: NewsPost, template_key: str, spec: CardSpec,
         base = vertical_gradient(W, H, hex_to_rgb(theme["top"]), hex_to_rgb(theme["bottom"]))
         if art is not None:
             fr_w, fr_h = W - 2 * int(W * 0.07), int(H * 0.5)
-            fr = cover_resize(art, fr_w, fr_h)
+            fr = cover_resize(art, fr_w, fr_h, post.focus_x, post.focus_y, post.zoom)
             rad = int(W * 0.04)
             mask = Image.new("L", (fr_w, fr_h), 0)
             ImageDraw.Draw(mask).rounded_rectangle([0, 0, fr_w, fr_h], radius=rad, fill=255)
             base.paste(fr, (int(W * 0.07), int(H * 0.09)), mask)
     elif art is not None:
-        base = cover_resize(art, W, H)
+        base = cover_resize(art, W, H, post.focus_x, post.focus_y, post.zoom)
     else:
         base = vertical_gradient(W, H, hex_to_rgb(theme["top"]), hex_to_rgb(theme["bottom"]))
 
