@@ -81,7 +81,7 @@ git clone <your-repo-url> IMAGEBOT && cd IMAGEBOT
 python3 -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env            # optional: add the keys you have
-python run.py                   # opens http://127.0.0.1:5000
+python run.py                   # opens http://127.0.0.1:8777
 ```
 
 Paste news → **Make my card** → **click any template** to swap instantly → **Download** (or the carousel `.zip`).
@@ -159,7 +159,7 @@ python -m imagebot make --news "..." --no-art --style classic
 # a single-story news post (16 templates; --all-templates for every one)
 python -m imagebot news --news "Solo Leveling S3 confirmed, premieres July 4" --template breaking
 
-python -m imagebot web --port 8080     # launch the UI
+python -m imagebot web --port 8777     # launch the UI
 ```
 
 `--help` lists every flag (`--per`, `--event`, `--watermark`, `--date`,

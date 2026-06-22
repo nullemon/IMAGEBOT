@@ -147,7 +147,7 @@ def main(argv=None) -> int:
 
     w = sub.add_parser("web", help="launch the web UI")
     w.add_argument("--host", default="127.0.0.1")
-    w.add_argument("--port", type=int, default=5000)
+    w.add_argument("--port", type=int, default=8777)
     w.set_defaults(func=_cmd_web)
 
     args = ap.parse_args(argv)

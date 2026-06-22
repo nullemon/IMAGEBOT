@@ -60,7 +60,7 @@ class Settings:
     # output / server
     output_dir: str = "output"
     host: str = "127.0.0.1"
-    port: int = 5000
+    port: int = 8777
     # branding + layout
     brand: BrandConfig = field(default_factory=BrandConfig)
     themes: dict = field(default_factory=lambda: dict(DEFAULT_THEMES))
@@ -142,7 +142,7 @@ def load_settings() -> Settings:
         google_cse_id=_env("GOOGLE_CSE_ID"),
         output_dir=_env("IMAGEBOT_OUTPUT_DIR", "output"),
         host=_env("IMAGEBOT_HOST", "127.0.0.1"),
-        port=int(_env("IMAGEBOT_PORT", "5000") or "5000"),
+        port=int(_env("IMAGEBOT_PORT", "8777") or "8777"),
     )
 
     # Merge config.yaml (or config.example.yaml as a starting fallback).

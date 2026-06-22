@@ -5,6 +5,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Ubuntu 24.04 ships python without venv/pip — fail early with the exact fix.
+if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
+  echo "!! python3-venv is missing. Install it, then re-run this script:"
+  echo "     sudo apt update && sudo apt install -y python3-venv python3-pip"
+  exit 1
+fi
+
 echo "==> Python venv"
 python3 -m venv .venv
 # shellcheck disable=SC1091
