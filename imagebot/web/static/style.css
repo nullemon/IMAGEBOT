@@ -140,3 +140,36 @@ button.small{width:auto;padding:9px 14px}
 .prow-img .adj-label{font-size:.78rem;color:var(--muted);font-weight:600}
 .prow-img label{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--muted);margin:0}
 .prow-img input[type=range]{width:130px;padding:0}
+
+/* interactive photo editor (drag to move, scroll/buttons to zoom) */
+.photo-edit{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;max-width:460px}
+.pe-canvas{width:100%;display:block;border-radius:10px;background:#0c0e16;
+  cursor:grab;touch-action:none;border:1px solid var(--line)}
+.pe-canvas.grabbing{cursor:grabbing}
+.pe-canvas.empty{cursor:default}
+.pe-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px}
+.pe-hint{color:var(--muted);font-size:.74rem}
+.pe-btns{display:flex;gap:6px}
+.pe-btns button{width:auto;padding:5px 12px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--text);font-weight:700;line-height:1;border-radius:8px}
+.pe-btns .pe-reset{font-weight:500;color:var(--muted)}
+.pe-btns button:hover{border-color:var(--accent)}
+
+/* ranking editor */
+.rank-head{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px}
+.rank-head .grow{flex:1;min-width:220px}
+.rank-head .grow input{margin-top:5px}
+.rank-logo{flex:0 0 auto}
+.rank-logo-row{display:flex;align-items:center;gap:10px;margin-top:5px}
+.rank-logo-prev{width:46px;height:46px;border-radius:50%;object-fit:cover;
+  border:1px solid var(--line);background:#0c0e16;display:inline-flex;align-items:center;
+  justify-content:center;color:var(--muted);font-weight:800;flex:0 0 auto}
+.rank-logo .upload input{width:auto}
+.rank-entries{display:flex;flex-direction:column;gap:12px}
+.rrow{display:flex;gap:12px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:12px;padding:12px}
+.rrow-rank{flex:0 0 auto;width:40px;display:flex;align-items:flex-start;justify-content:center;padding-top:6px}
+.rrow-num{font-weight:800;font-size:1.35rem;color:var(--accent)}
+.rrow-body{flex:1;min-width:0}
+.rrow-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:680px){.rrow-grid{grid-template-columns:1fr}}

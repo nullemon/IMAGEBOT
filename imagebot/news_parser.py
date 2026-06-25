@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from .models import Panel, NewsPost
+from .models import Panel, NewsPost, RankingList, RankEntry
 from .providers import get_text_provider
 
 _MONTHS = ("january february march april may june july august september "
@@ -268,3 +268,122 @@ def _heuristic_parse(text: str, default_tag_sub: str, max_panels: int) -> list[P
             query=f"{title} anime key visual official art",
         ))
     return panels
+
+
+# ==========================================================================
+# Ranking lists (Top-N, Anime-Corner style)
+# ==========================================================================
+RANKING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "the list title in CAPS, e.g. 'TOP 10 FEMALE CHARACTERS'"},
+        "subtitle": {"type": "string", "description": "a sub-line like 'BASED ON SPRING 2026 WEEK 11 (JUN 12 - JUN 19)', else ''"},
+        "entries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "the character / title being ranked"},
+                    "source": {"type": "string", "description": "the anime/series it is from (or a short sub-line); '' if same as name"},
+                    "query": {"type": "string", "description": "best Google Images query for this character's official art"},
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["title", "entries"],
+    "additionalProperties": False,
+}
+
+_RANKING_SYSTEM = """You are an editor for an anime-news Instagram page that \
+posts Top-N ranking graphics (like Anime Corner). Turn the user's note/list into \
+one structured ranking.
+- title: a short headline in CAPS, e.g. "TOP 10 FEMALE CHARACTERS". Keep the \
+user's wording if given; otherwise infer it from the list.
+- subtitle: a sub-line such as the poll/source/week, e.g. "BASED ON SPRING 2026 \
+WEEK 11 (JUN 12 - JUN 19)" if present, else "".
+- entries: in ranked order (best first). name = the character/title being ranked; \
+source = the anime/series it is from (or a short sub-line), "" if there is none. \
+query = the best Google Images search for that character's official art.
+Return JSON only."""
+
+
+def parse_ranking(text: str, settings, provider=None, max_entries: int = 20) -> RankingList:
+    text = (text or "").strip()
+    if not text:
+        return RankingList(title="TOP 10", entries=[])
+    prov = provider if provider is not None else get_text_provider(settings)
+    if prov is not None:
+        try:
+            data = prov.complete_json(_RANKING_SYSTEM, f"Note:\n\n{text}", RANKING_SCHEMA)
+            if isinstance(data, dict) and data.get("entries"):
+                rl = RankingList(title=(data.get("title") or "TOP 10").upper(),
+                                 subtitle=(data.get("subtitle") or "").strip())
+                for i, it in enumerate(data["entries"][:max_entries], 1):
+                    if isinstance(it, dict) and (it.get("name") or "").strip():
+                        name = it["name"].strip()
+                        src = (it.get("source") or "").strip()
+                        rl.entries.append(RankEntry(
+                            rank=i, name=name, source=src,
+                            query=(it.get("query") or f"{name} {src} anime").strip()))
+                if rl.entries:
+                    return rl
+        except Exception:
+            pass
+    return _heuristic_ranking(text, max_entries)
+
+
+def _split_name_source(s: str) -> tuple[str, str]:
+    s = s.strip()
+    m = re.match(r"^(.+?)\s*[\(\[]([^)\]]+)[\)\]]\s*$", s)   # "Name (Show)"
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+    for sep in (" — ", " – ", " - ", " | ", " · ", " / ", " from ", " — ", ": "):
+        if sep in s:
+            a, b = s.split(sep, 1)
+            return a.strip(), b.strip()
+    return s, ""
+
+
+_RANK_PREFIX_RE = re.compile(r"^\s*#?\s*(\d{1,2})\s*[\.\)\-:–—]\s*(.+)$")
+
+
+def _heuristic_ranking(text: str, max_entries: int) -> RankingList:
+    labels = {k.lower(): v.strip() for k, v in
+              re.findall(r"(?im)^\s*(title|subtitle|sub)\s*:\s*(.+?)\s*$", text)}
+    title = (labels.get("title") or "").upper()
+    subtitle = labels.get("subtitle") or labels.get("sub") or ""
+
+    m = re.search(r"(?ims)^\s*(?:items?|entries|list|ranking)\s*:\s*\n(.+)$", text)
+    body = m.group(1) if m else text
+
+    entries: list[RankEntry] = []
+    for ln in body.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        if re.match(r"(?i)^(title|subtitle|sub|items?|entries|list|ranking)\s*:", ln):
+            continue
+        nm = _RANK_PREFIX_RE.match(ln)
+        if nm:
+            part = nm.group(2).strip()
+        else:
+            low = ln.lower()
+            # an un-numbered heading like "Top 10 Female Characters" -> the title
+            if not entries and not title and any(
+                    k in low for k in ("top ", "best ", "ranking", "tier")):
+                title = ln.upper()
+                continue
+            part = ln.lstrip("-*•· ").strip()
+        if not part:
+            continue
+        name, source = _split_name_source(part)
+        entries.append(RankEntry(rank=len(entries) + 1, name=name, source=source,
+                                 query=f"{name} {source} anime".strip()))
+        if len(entries) >= max_entries:
+            break
+
+    if not entries:
+        entries = [RankEntry(rank=1, name=text[:60])]
+    return RankingList(title=title or "TOP 10", subtitle=subtitle, entries=entries)

@@ -11,13 +11,16 @@ from . import logos
 from .compositor import render_cards, render_cover, save_cards
 from .fonts import FontBook
 from .image_search import download_best, fetch_url_to_file
-from .models import Panel, NewsPost
-from .news_parser import parse_news, parse_news_post
+from .models import Panel, NewsPost, RankingList, RankEntry
+from .news_parser import parse_news, parse_news_post, parse_ranking
 from .newscard import render_news, save_news, NEWS_TEMPLATES, DEFAULT_NEWS
+from .rankcard import render_ranking, save_ranking, RANK_TEMPLATES, DEFAULT_RANK
 from .providers import get_text_provider, get_image_provider
 from .styles import all_styles, get_style
 
 _NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
+_RANK_NAME = {k: n for k, n in RANK_TEMPLATES}
+RANK_MAX = 20                     # most entries we'll keep from a pasted list
 
 _FONTS = FontBook()
 
@@ -485,3 +488,135 @@ def render_panels(panels: list[Panel], settings, opts: GenerateOptions | None = 
                   progress=None, **_) -> GenerateResult:
     opts = opts or GenerateOptions()
     return make_variants(settings, opts, panels=panels, progress=progress)
+
+
+# ==========================================================================
+# Ranking lists (Top-N, Anime-Corner style)
+# ==========================================================================
+@dataclass
+class RankingResult:
+    ranking: RankingList
+    runid: str = ""
+    current: dict = field(default_factory=dict)   # {key, name, outputs:[...]}
+    caption: str = ""
+    provider_used: str = "none"
+    warnings: list = field(default_factory=list)
+    log: list = field(default_factory=list)
+    capabilities: dict = field(default_factory=dict)
+
+
+_RANK_CAPTION_SYSTEM = (
+    "Write ONE Instagram caption for an anime Top-N ranking post. A hooky first "
+    "line naming the list, optionally the top 3, then 8-15 relevant hashtags on "
+    "the last line. Tasteful emoji. Under 500 characters. Plain text.")
+
+
+def _resolve_ranking_art(rl: RankingList, settings, opts: GenerateOptions, provider, progress):
+    warnings = []
+    n = len(rl.entries)
+    for i, e in enumerate(rl.entries, 1):
+        if e.image_path and Path(e.image_path).exists():
+            continue
+        if e.image_url:
+            if progress:
+                progress(f"[{i}/{n}] downloading image for {e.name}")
+            p = fetch_url_to_file(e.image_url, e.name or f"rank{i}")
+            if p:
+                e.image_path = p
+                continue
+        if opts.find_art:
+            if progress:
+                progress(f"[{i}/{n}] finding art for “{e.name}”"
+                         + (" (AI pick)" if (opts.vision_pick and provider) else ""))
+            p = download_best(e.search_query(), settings,
+                              provider=(provider if opts.vision_pick else None),
+                              clean=opts.clean_art)
+            if p:
+                e.image_path = p
+                continue
+        warnings.append(f"No art for “{e.name}” — used a placeholder.")
+    return warnings
+
+
+def ranking_caption(rl: RankingList, settings, opts, provider=None) -> str:
+    prov = provider if provider is not None else get_text_provider(settings, opts.provider)
+    if prov is not None:
+        try:
+            body = rl.title + "\n" + "\n".join(
+                f"{e.rank}. {e.name}" + (f" — {e.source}" if e.source else "")
+                for e in rl.entries)
+            return prov.complete_text(_RANK_CAPTION_SYSTEM, body, max_tokens=350).strip()
+        except Exception:
+            pass
+    tags = "#anime #animeranking #anime2026 " + " ".join(
+        "#" + "".join(c for c in e.name.lower() if c.isalnum()) for e in rl.entries[:5])
+    lines = "\n".join(f"{e.rank}. {e.name}" + (f" — {e.source}" if e.source else "")
+                      for e in rl.entries[:10])
+    return f"🏆 {rl.title}!\n\n{lines}\n\nDo you agree? 👇\n\n{tags}"
+
+
+def render_ranking_one(rl: RankingList, settings, opts: GenerateOptions | None,
+                       template_key: str, runid: str) -> list[dict]:
+    """Render ONE ranking template for a resolved list — one output per account,
+    each stamped with that account's brand in the header. [{account, cards:[...]}]."""
+    opts = opts or GenerateOptions()
+    outputs = []
+    for b in account_brands(opts, settings):
+        spec = _spec(settings, opts)
+        _apply_account(spec, b)
+        card = render_ranking(rl, template_key, spec, _FONTS)
+        sub = _slug(b["handle"] or b["watermark"])
+        cards = save_ranking(card, f"{settings.output_dir}/{runid}/rank_{template_key}/{sub}",
+                             prefix="ranking")
+        outputs.append({"account": b["handle"] or b["watermark"] or "", "cards": cards})
+    return outputs
+
+
+def prepare_ranking(settings, opts: GenerateOptions, news: str, progress=None) -> dict:
+    prov = get_text_provider(settings, opts.provider)
+    pu = getattr(prov, "name", "none")
+    if progress:
+        progress(f"parsing the list (provider: {pu})")
+    rl = parse_ranking(news, settings, provider=prov, max_entries=RANK_MAX)
+    if not rl.entries:
+        return {"ranking": rl, "warnings": ["Couldn't read any list entries."],
+                "provider_used": pu, "caption": ""}
+    warnings = _resolve_ranking_art(rl, settings, opts, prov, progress)
+    caption = ranking_caption(rl, settings, opts, provider=prov) if opts.write_caption else ""
+    return {"ranking": rl, "warnings": warnings, "provider_used": pu, "caption": caption}
+
+
+def make_ranking(news: str, settings, opts: GenerateOptions | None = None,
+                 template_key: str | None = None, progress=None) -> RankingResult:
+    opts = opts or GenerateOptions()
+    prep = prepare_ranking(settings, opts, news, progress=progress)
+    rl = prep["ranking"]
+    if not rl.entries:
+        return RankingResult(ranking=rl, warnings=prep["warnings"],
+                             provider_used=prep["provider_used"])
+    runid = time.strftime("%Y%m%d-%H%M%S")
+    key = template_key or DEFAULT_RANK
+    if progress:
+        progress("rendering the ranking…")
+    outputs = render_ranking_one(rl, settings, opts, key, runid)
+    res = RankingResult(ranking=rl, runid=runid, provider_used=prep["provider_used"],
+                        warnings=prep["warnings"], caption=prep["caption"],
+                        current={"key": key, "name": _RANK_NAME.get(key, key), "outputs": outputs})
+    try:
+        from . import enhance
+        res.capabilities = enhance.capabilities()
+    except Exception:
+        res.capabilities = {}
+    return res
+
+
+def render_ranking_from_list(rl: RankingList, settings, opts: GenerateOptions, runid: str,
+                             template_key: str) -> RankingResult:
+    """Re-render a (possibly edited) list into a template — re-resolves art."""
+    prov = get_text_provider(settings, opts.provider)
+    warnings = _resolve_ranking_art(rl, settings, opts, prov, None)
+    outputs = render_ranking_one(rl, settings, opts, template_key, runid)
+    return RankingResult(ranking=rl, runid=runid, warnings=warnings,
+                         provider_used=getattr(prov, "name", "none"),
+                         current={"key": template_key, "name": _RANK_NAME.get(template_key, template_key),
+                                  "outputs": outputs})

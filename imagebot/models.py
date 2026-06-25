@@ -88,3 +88,50 @@ class NewsPost:
     def from_dict(cls, d: dict) -> "NewsPost":
         allowed = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         return cls(**{k: v for k, v in d.items() if k in allowed})
+
+
+@dataclass
+class RankEntry:
+    """One row of a ranking list (rank + character/title + show + image)."""
+    rank: int = 0
+    name: str = ""
+    source: str = ""                 # the show / sub-line
+    image_path: str = ""
+    image_url: str = ""
+    query: str = ""
+    focus_x: float = 0.5
+    focus_y: float = 0.32            # bias the crop a little higher (faces sit up top)
+    zoom: float = 1.0
+
+    def search_query(self) -> str:
+        return (self.query or f"{self.name} {self.source} anime").strip()
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RankEntry":
+        allowed = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in d.items() if k in allowed})
+
+
+@dataclass
+class RankingList:
+    """A ranked-list graphic (Top-N), Anime-Corner style."""
+    title: str = "TOP 10"
+    subtitle: str = ""
+    entries: list = field(default_factory=list)   # list[RankEntry]
+    accent: str = ""
+    logo_path: str = ""              # optional header badge logo (favicon); "" -> text initials
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["entries"] = [e.to_dict() if isinstance(e, RankEntry) else e for e in self.entries]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RankingList":
+        entries = [RankEntry.from_dict(e) for e in d.get("entries", []) if isinstance(e, dict)]
+        allowed = {f for f in cls.__dataclass_fields__} - {"entries"}  # type: ignore[attr-defined]
+        base = {k: v for k, v in d.items() if k in allowed}
+        return cls(entries=entries, **base)

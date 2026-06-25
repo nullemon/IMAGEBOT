@@ -29,6 +29,7 @@
       <div class="mode-toggle">
         <label><input type="radio" name="mode" value="lineup" checked /> Line-up list</label>
         <label><input type="radio" name="mode" value="news" /> News post</label>
+        <label><input type="radio" name="mode" value="ranking" /> Ranking list</label>
       </div>
     </div>
     <div class="io">
@@ -145,12 +146,41 @@ Solo Leveling Season 3 — July 4"></textarea>
         <label class="upload">Art<input type="file" accept="image/*" id="news-art" /></label>
         <span id="news-art-state" class="art-state"></span>
       </div>
-      <div class="prow-img">
-        <span class="adj-label">Move / zoom image:</span>
-        <label>↔ X<input data-n="focus_x" type="range" min="0" max="1" step="0.02" value="0.5" /></label>
-        <label>↕ Y<input data-n="focus_y" type="range" min="0" max="1" step="0.02" value="0.4" /></label>
-        <label>🔍 zoom<input data-n="zoom" type="range" min="1" max="2.5" step="0.05" value="1" /></label>
+      <div class="photo-edit" data-edit="news">
+        <canvas class="pe-canvas"></canvas>
+        <div class="pe-bar">
+          <span class="pe-hint">drag photo to move · scroll / − + to zoom</span>
+          <span class="pe-btns">
+            <button type="button" class="pe-out" title="zoom out">−</button>
+            <button type="button" class="pe-in" title="zoom in">+</button>
+            <button type="button" class="pe-reset">reset</button>
+          </span>
+        </div>
+        <input type="hidden" data-n="focus_x" value="0.5" />
+        <input type="hidden" data-n="focus_y" value="0.4" />
+        <input type="hidden" data-n="zoom" value="1" />
       </div>
+    </div>
+
+    <!-- ranking editor (Top-N list) -->
+    <div id="rank-fields" class="hidden">
+      <div class="rank-head">
+        <label class="grow">List title<input data-r="title" placeholder="TOP 10 FEMALE CHARACTERS" /></label>
+        <label class="grow">Subtitle <small>(optional)</small><input data-r="subtitle" placeholder="BASED ON SPRING 2026 WEEK 11 (JUN 12 - JUN 19)" /></label>
+        <div class="rank-logo">
+          <span class="acc-label">Brand logo / favicon</span>
+          <div class="rank-logo-row">
+            <img id="rank-logo-prev" class="rank-logo-prev hidden" alt="" />
+            <span id="rank-logo-fallback" class="rank-logo-prev fallback">Aa</span>
+            <label class="upload">Upload<input type="file" accept="image/*" id="rank-logo" /></label>
+            <button type="button" id="rank-logo-clear" class="ghost small">use text</button>
+          </div>
+          <input type="hidden" data-r="logo_path" />
+          <small class="muted">No logo? The header shows your watermark initials.</small>
+        </div>
+      </div>
+      <div id="rank-entries" class="rank-entries"></div>
+      <button id="add-entry" class="ghost">+ Add entry</button>
     </div>
   </section>
 
@@ -182,11 +212,54 @@ Solo Leveling Season 3 — July 4"></textarea>
         <span class="art-state"></span>
         <button class="ghost danger remove" type="button">✕</button>
       </div>
-      <div class="prow-img">
-        <span class="adj-label">Move / zoom image:</span>
-        <label>↔ X<input data-f="focus_x" type="range" min="0" max="1" step="0.02" value="0.6" /></label>
-        <label>↕ Y<input data-f="focus_y" type="range" min="0" max="1" step="0.02" value="0.4" /></label>
-        <label>🔍 zoom<input data-f="zoom" type="range" min="1" max="2.5" step="0.05" value="1" /></label>
+      <div class="photo-edit" data-edit="panel">
+        <canvas class="pe-canvas"></canvas>
+        <div class="pe-bar">
+          <span class="pe-hint">drag photo to move · scroll / − + to zoom</span>
+          <span class="pe-btns">
+            <button type="button" class="pe-out" title="zoom out">−</button>
+            <button type="button" class="pe-in" title="zoom in">+</button>
+            <button type="button" class="pe-reset">reset</button>
+          </span>
+        </div>
+        <input type="hidden" data-f="focus_x" value="0.6" />
+        <input type="hidden" data-f="focus_y" value="0.4" />
+        <input type="hidden" data-f="zoom" value="1" />
+      </div>
+    </div>
+  </template>
+
+  <template id="rank-row">
+    <div class="rrow">
+      <div class="rrow-rank"><span class="rrow-num">1</span></div>
+      <div class="rrow-body">
+        <div class="rrow-grid">
+          <label class="grow">Name<input data-e="name" type="text" placeholder="Character / title" /></label>
+          <label class="grow">From / show<input data-e="source" type="text" placeholder="Anime it's from" /></label>
+        </div>
+        <div class="prow-art">
+          <label class="grow">Search query<input data-e="query" type="text" placeholder="auto from name" /></label>
+          <label class="grow">Image URL<input data-e="image_url" type="text" placeholder="direct link to override search" /></label>
+          <input type="hidden" data-e="image_path" />
+          <input type="hidden" data-e="rank" />
+          <label class="upload">Art<input type="file" accept="image/*" class="art-file" /></label>
+          <span class="art-state"></span>
+          <button class="ghost danger remove" type="button">✕</button>
+        </div>
+        <div class="photo-edit" data-edit="rank">
+          <canvas class="pe-canvas"></canvas>
+          <div class="pe-bar">
+            <span class="pe-hint">drag photo to move · scroll / − + to zoom</span>
+            <span class="pe-btns">
+              <button type="button" class="pe-out" title="zoom out">−</button>
+              <button type="button" class="pe-in" title="zoom in">+</button>
+              <button type="button" class="pe-reset">reset</button>
+            </span>
+          </div>
+          <input type="hidden" data-e="focus_x" value="0.5" />
+          <input type="hidden" data-e="focus_y" value="0.32" />
+          <input type="hidden" data-e="zoom" value="1" />
+        </div>
       </div>
     </div>
   </template>

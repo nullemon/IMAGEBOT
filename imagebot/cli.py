@@ -99,6 +99,44 @@ def _cmd_news(args) -> int:
     return 0
 
 
+def _cmd_rank(args) -> int:
+    settings = get_settings()
+    if args.file:
+        news = open(args.file, "r", encoding="utf-8").read()
+    elif args.list:
+        news = args.list
+    else:
+        news = sys.stdin.read()
+    if not news.strip():
+        print("No list provided (use --list, --file, or stdin).", file=sys.stderr)
+        return 2
+    from .pipeline import make_ranking, render_ranking_one
+    from .rankcard import RANK_TEMPLATES
+    _w, _h = SIZES.get(args.size, SIZES["portrait"])
+    opts = GenerateOptions(
+        provider=args.provider, width=_w, height=_h,
+        watermark=args.watermark, find_art=not args.no_art, vision_pick=not args.no_vision,
+        clean_art=args.clean, write_caption=not args.no_caption,
+    )
+    res = make_ranking(news, settings, opts, template_key=args.template,
+                       progress=lambda m: print("  ·", m))
+    print("\nList:", res.ranking.title, "|", res.ranking.subtitle or "—", "| run:", res.runid)
+    for e in res.ranking.entries:
+        print(f"  {e.rank:>2}. {e.name}" + (f" — {e.source}" if e.source else ""))
+    for w in res.warnings:
+        print("  ⚠", w)
+    if res.current:
+        print("Card:", res.current["outputs"][0]["cards"][0])
+    if args.all_templates:
+        print("\nAll templates:")
+        for k, n in RANK_TEMPLATES:
+            outs = render_ranking_one(res.ranking, settings, opts, k, res.runid)
+            print(f"  → {n:16} {outs[0]['cards'][0]}")
+    if res.caption:
+        print("\nCaption:\n" + res.caption)
+    return 0
+
+
 def _cmd_web(args) -> int:
     from .web import create_app
     settings = get_settings()
@@ -150,6 +188,20 @@ def main(argv=None) -> int:
     nw.add_argument("--ai-art", action="store_true")
     nw.add_argument("--no-caption", action="store_true")
     nw.set_defaults(func=_cmd_news)
+
+    rk = sub.add_parser("rank", help="make a Top-N ranking card (Anime-Corner style)")
+    rk.add_argument("--list", help="the ranking text / list")
+    rk.add_argument("--file", help="read the list from a file")
+    rk.add_argument("--provider", choices=["claude", "openai", "gemini", "grok", "auto", "none"], default=None)
+    rk.add_argument("--template", default="corner", help="ranking template key (default: corner)")
+    rk.add_argument("--size", choices=list(SIZES), default="portrait", help="output size")
+    rk.add_argument("--all-templates", action="store_true", help="render every ranking template")
+    rk.add_argument("--watermark", default=None, help="brand shown in the header")
+    rk.add_argument("--no-art", action="store_true", help="skip image search (placeholders)")
+    rk.add_argument("--no-vision", action="store_true")
+    rk.add_argument("--clean", action="store_true")
+    rk.add_argument("--no-caption", action="store_true")
+    rk.set_defaults(func=_cmd_rank)
 
     w = sub.add_parser("web", help="launch the web UI")
     w.add_argument("--host", default="127.0.0.1")

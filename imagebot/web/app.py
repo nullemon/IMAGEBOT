@@ -15,17 +15,20 @@ from flask import (Flask, jsonify, render_template, request,
 
 from ..config import get_settings
 from ..image_search import CACHE_DIR
-from ..models import Panel, NewsPost
+from ..models import Panel, NewsPost, RankingList
 from ..pipeline import (GenerateOptions, build_carousel, render_one,
                         prepare_lineup, prepare_news, render_news_one,
-                        render_news_from_post, SIZES)
+                        render_news_from_post, prepare_ranking, render_ranking_one,
+                        render_ranking_from_list, DEFAULT_RANK, SIZES)
 from ..styles import all_styles
 from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
+from ..rankcard import rank_templates, RANK_TEMPLATES
 from .. import logos
 
 ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_STYLE = all_styles()[0].key
 NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
+RANK_NAME = {k: n for k, n in RANK_TEMPLATES}
 _STYLE_NAME = {s.key: s.name for s in all_styles()}
 
 
@@ -77,6 +80,12 @@ def create_app(settings=None) -> Flask:
         return [{"account": o["account"], "cards": [file_url(c) for c in o["cards"]]}
                 for o in outputs]
 
+    def with_art(d):
+        """Attach a browsable URL for an item's resolved art (for the editor)."""
+        ip = d.get("image_path")
+        d["art_url"] = file_url(ip) if ip else ""
+        return d
+
     def _caps():
         try:
             from .. import enhance
@@ -88,7 +97,7 @@ def create_app(settings=None) -> Flask:
         return {
             "ok": True, "mode": "lineup", "runid": runid,
             "provider_used": prep["provider_used"],
-            "panels": [p.to_dict() for p in prep["panels"]],
+            "panels": [with_art(p.to_dict()) for p in prep["panels"]],
             "styles": [{"key": s.key, "name": s.name} for s in all_styles()],
             "current": {"key": current_key, "name": _STYLE_NAME.get(current_key, current_key),
                         "outputs": outputs_urls(outputs)},
@@ -99,8 +108,20 @@ def create_app(settings=None) -> Flask:
     def news_payload(runid, post, current_key, outputs, provider_used, caption, warnings, log):
         return {
             "ok": True, "mode": "news", "runid": runid, "provider_used": provider_used,
-            "post": post.to_dict(), "styles": news_templates(),
+            "post": with_art(post.to_dict()), "styles": news_templates(),
             "current": {"key": current_key, "name": NEWS_NAME.get(current_key, current_key),
+                        "outputs": outputs_urls(outputs)},
+            "caption": caption, "warnings": warnings, "log": log, "capabilities": _caps(),
+        }
+
+    def ranking_payload(runid, rl, current_key, outputs, provider_used, caption, warnings, log):
+        rd = rl.to_dict()
+        rd["entries"] = [with_art(e) for e in rd.get("entries", [])]
+        rd["logo_url"] = file_url(rd["logo_path"]) if rd.get("logo_path") else ""
+        return {
+            "ok": True, "mode": "ranking", "runid": runid, "provider_used": provider_used,
+            "ranking": rd, "styles": rank_templates(),
+            "current": {"key": current_key, "name": RANK_NAME.get(current_key, current_key),
                         "outputs": outputs_urls(outputs)},
             "caption": caption, "warnings": warnings, "log": log, "capabilities": _caps(),
         }
@@ -131,6 +152,15 @@ def create_app(settings=None) -> Flask:
         opts = _opts_from(data)
         runid = time.strftime("%Y%m%d-%H%M%S")
         log: list[str] = []
+        if data.get("mode") == "ranking":
+            opts.find_art = _bool(data.get("find_art"), True)
+            prep = prepare_ranking(settings, opts, news, progress=log.append)
+            if not prep["ranking"].entries:
+                return jsonify(ok=False, error="Couldn't read any list entries."), 400
+            current = data.get("style") or DEFAULT_RANK
+            outputs = render_ranking_one(prep["ranking"], settings, opts, current, runid)
+            return jsonify(ranking_payload(runid, prep["ranking"], current, outputs,
+                                           prep["provider_used"], prep["caption"], prep["warnings"], log))
         if data.get("mode") == "news":
             prep = prepare_news(settings, opts, news, progress=log.append)
             if not prep["post"].headline:
@@ -153,6 +183,14 @@ def create_app(settings=None) -> Flask:
         opts = _opts_from(data)
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
         log: list[str] = []
+        if data.get("mode") == "ranking":
+            rl = RankingList.from_dict(data.get("ranking", {}))
+            if not rl.entries:
+                return jsonify(ok=False, error="No list entries."), 400
+            current = data.get("style") or DEFAULT_RANK
+            res = render_ranking_from_list(rl, settings, opts, runid, current)
+            return jsonify(ranking_payload(runid, res.ranking, current, res.current["outputs"],
+                                           res.provider_used, "", res.warnings, log))
         if data.get("mode") == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:
@@ -175,6 +213,14 @@ def create_app(settings=None) -> Flask:
         data = request.get_json(silent=True) or {}
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
         opts = _opts_from(data)
+        if data.get("mode") == "ranking":
+            rl = RankingList.from_dict(data.get("ranking", {}))
+            if not rl.entries:
+                return jsonify(ok=False, error="Nothing to render."), 400
+            style = data.get("style") or DEFAULT_RANK
+            outputs = render_ranking_one(rl, settings, opts, style, runid)
+            return jsonify(ok=True, mode="ranking", key=style, name=RANK_NAME.get(style, style),
+                           runid=runid, outputs=outputs_urls(outputs))
         if data.get("mode") == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:

@@ -63,5 +63,30 @@ ITEMS:
 
 ---
 
+## Ranking list (Top-N, Anime-Corner style)
+
+```
+You are an anime-news researcher. Build a Top-N ranking like the Anime Corner
+cards. (Topic: e.g. "best girls of Spring 2026" / "highest-rated anime this
+week", or leave blank for trending.)
+
+Output ONLY these lines, nothing else:
+
+TITLE: <e.g. TOP 10 FEMALE CHARACTERS>
+SUBTITLE: <e.g. BASED ON SPRING 2026 WEEK 11 (JUN 12 - JUN 19), or leave blank>
+ITEMS:
+1. <Name> — <Anime it's from>
+2. <Name> — <Anime it's from>
+3. <Name> — <Anime it's from>
+... up to 10, best first.
+```
+
+→ Paste the result into IMAGEBOT in **Ranking list** mode. Each entry's image is
+searched automatically; you can then **drag-to-reframe** or upload art per row,
+swap colour templates instantly, and add a brand **logo / favicon** for the
+header (falls back to your watermark initials).
+
+---
+
 Tip: ask the AI for several at once — e.g. "give me 5 separate news posts in that
 format, separated by a blank line" — and run them one by one.
