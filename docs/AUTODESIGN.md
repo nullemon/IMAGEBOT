@@ -22,13 +22,16 @@ pasted text  (a line, a few updates, a Top-N list, OR a full article)
 render-ready plan  →  normal render path  →  fully editable result
 ```
 
-**Paste an article and it figures out the list.** With an AI provider configured,
-step 1 reads the whole article and routes it, and step 2's parsers pull the
-structure straight out of prose (a ranking article → the ranked entries; a roundup
-→ the line-up; a single story → one post). The LLM also fills the hero **verb** and
+**Paste an article and it figures out the list.** The heuristic routes first and
+reports whether it's *certain*. When it isn't — prose, a full article, anything
+ambiguous or ranking-ish — the **AI router reads the whole thing and decides**, and
+step 2's parsers pull the structure straight out of the prose (a ranking article →
+the ranked entries; a roundup → the line-up; a single story → one post). On a clean
+numbered list or a short headline the heuristic is already 100% sure, so it skips
+that extra call (same answer, faster). The AI also fills the hero **verb** and
 **confidence** per item; the deterministic engine fills whatever it leaves blank, so
-it's complete and polished either way. With no key, the rule-based router handles
-lines/lists (an article still works best with a provider).
+it's complete and polished either way. Set `autopilot.ALWAYS_LLM_ROUTE = True` to
+ask the AI on *every* paste; with no key, the rule-based router handles lines/lists.
 
 ---
 

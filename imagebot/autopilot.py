@@ -204,34 +204,63 @@ def _has_event_kw(line: str) -> bool:
     return any(kw in low for kw in (k for k, _ in _EVENTS))
 
 
-def route(text: str) -> str:
-    """Return 'ranking' | 'lineup' | 'news'."""
+# Flip to True to ALWAYS ask the AI router (every paste), even on unambiguous
+# input. Default False = ask the AI on every prose/article/ambiguous paste (where
+# it adds accuracy) and trust the heuristic only when the format is 100% clear.
+ALWAYS_LLM_ROUTE = False
+
+
+def _looks_prose(text: str) -> bool:
+    """True when the text reads like an article/paragraphs (not a tidy list)."""
+    t = (text or "").strip()
+    lines = [l for l in t.splitlines() if l.strip()]
+    if len(t) > 240 and t.count(". ") >= 2:
+        return True
+    if len(lines) <= 2 and len(t) > 180:
+        return True
+    return any(len(l) > 140 for l in lines)
+
+
+def _route_confident(text: str) -> tuple[str, bool]:
+    """Heuristic route + whether it's certain. Uncertain → let the AI decide."""
     t = (text or "").strip()
     if not t:
-        return "news"
+        return "news", True
     low = t.lower()
     lines = [l.strip() for l in t.splitlines() if l.strip()]
-
     numbered = [l for l in lines if _NUM_LINE.match(l)]
     has_items_label = bool(re.search(r"(?im)^\s*items?\s*:", t))
     ranking_words = bool(re.search(r"(?i)\btop\s*\d+\b|\branking\b|\btier\s*list\b|\bbest\s+\w+\s+of\b|\branked\b", low))
+    prose = _looks_prose(t)
+    # ranking wording but no visible list → could be a ranking write-up: let the AI judge
+    fuzzy_rank = ranking_words and len(numbered) < 3 and not has_items_label
 
-    # a numbered list: ranking unless the entries read like dated/status announcements
+    # a numbered list (or explicit ITEMS:) is an unambiguous structure
     if len(numbered) >= 3:
-        if ranking_words or has_items_label:      # an explicit "TOP N"/"ITEMS:" wins
-            return "ranking"
+        if ranking_words or has_items_label:
+            return "ranking", True
         verby = sum(1 for l in numbered if _has_event_kw(l) or _extract_date(l) or "|" in l)
         if verby >= max(2, (len(numbered) + 1) // 2):
-            return "lineup"
-        return "ranking"
+            return "lineup", True
+        return "ranking", True
     if ranking_words and (has_items_label or len(numbered) >= 2 or len(lines) >= 4):
-        return "ranking"
+        return "ranking", not prose          # "the best … of" inside an article → let AI confirm
 
-    # not a ranking → line-up if there are clearly several separate items
     items = _split_items(t)
     if len(items) >= 2:
-        return "lineup"
-    return "news"
+        # piped / short status lines are clearly a line-up; prose paragraphs aren't
+        sure = (any("|" in l for l in items) or (not prose and all(len(i) < 120 for i in items))) and not fuzzy_rank
+        return "lineup", sure
+    # a single chunk: only a short, single-sentence headline is "obviously" one
+    # story — anything longer / multi-sentence / ranking-ish defers to the AI.
+    if prose or fuzzy_rank or t.count(". ") >= 1 or len(t) >= 120:
+        return "news", False
+    return "news", True
+
+
+def route(text: str) -> str:
+    """Return 'ranking' | 'lineup' | 'news' (heuristic only)."""
+    return _route_confident(text)[0]
 
 
 def _match_line(panel: Panel, lines: list, used: set):
@@ -353,8 +382,12 @@ def auto_design(text: str, settings, opts=None, provider=None, progress=None) ->
     opts = opts or GenerateOptions()
     prov = provider if provider is not None else get_text_provider(settings, opts.provider)
     pu = getattr(prov, "name", "none")
-    # an AI reads the whole thing (great for pasted articles); heuristics back it up
-    mode = _llm_route(text, prov) or route(text)
+    # heuristic first; when it's not certain (prose, articles, ambiguous), the AI
+    # reads the whole thing and decides — so accuracy is highest exactly where it
+    # matters, without a wasted call on dead-obvious lists/headlines.
+    mode, sure = _route_confident(text)
+    if prov is not None and (ALWAYS_LLM_ROUTE or not sure):
+        mode = _llm_route(text, prov) or mode
     if progress:
         progress(f"auto-design: read this as a {mode} post (provider: {pu})")
 
