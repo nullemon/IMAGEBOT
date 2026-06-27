@@ -33,9 +33,36 @@ RANK_MAX = 20
 EV = namedtuple("EV", "key verb verb_t tag accent")
 
 _EVENTS: list[tuple[str, EV]] = [
+    # --- specific multi-word phrases first (they win over the generic words) ---
     ("final season", EV("finale", "ENDING", "ENDING", "FINAL SEASON", "#ff4d5e")),
     ("new chapter",  EV("manga", "RETURNS", "RETURNING", "MANGA", "#48d08a")),
     ("release date", EV("release", "RELEASED", "RELEASING", "RELEASE DATE", "#48d08a")),
+    ("box office",   EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    ("highest-gross", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    ("highest gross", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    ("billion yen",  EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    ("anime of the year", EV("award", "WINS", "WINNING", "ANIME OF THE YEAR", "#ffd23f")),
+    (" wins ",       EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
+    ("award",        EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
+    ("voice actor",  EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    ("voice cast",   EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    ("seiyuu",       EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    ("cast as",      EV("casting", "CAST", "CASTING", "CASTING", "#5b8cff")),
+    ("joins the cast", EV("casting", "JOINS", "JOINING", "CASTING", "#5b8cff")),
+    ("anniversary",  EV("anniversary", "CELEBRATES", "CELEBRATING", "ANNIVERSARY", "#ffd23f")),
+    ("english dub",  EV("dub", "DUBBED", "DUBBING", "ENGLISH DUB", "#3fa7ff")),
+    ("live action",  EV("live_action", "CONFIRMED", "RUMORED", "LIVE ACTION", "#b07cff")),
+    ("live-action",  EV("live_action", "CONFIRMED", "RUMORED", "LIVE ACTION", "#b07cff")),
+    ("anime adaptation", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
+    ("gets an anime", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
+    ("gets anime",   EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
+    ("spin-off",     EV("spinoff", "ANNOUNCED", "RUMORED", "SPIN-OFF", "#5b8cff")),
+    ("spinoff",      EV("spinoff", "ANNOUNCED", "RUMORED", "SPIN-OFF", "#5b8cff")),
+    ("sequel",       EV("sequel", "CONFIRMED", "RUMORED", "SEQUEL", "#3fa7ff")),
+    ("crossover",    EV("collab", "REVEALED", "RUMORED", "CROSSOVER", "#ff39a8")),
+    ("most watched", EV("record", "TOPS CHARTS", "NEARING", "RECORD", "#19c37d")),
+    ("breaks record", EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
+    ("record",       EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
     ("comes back",   EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
     ("come back",    EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
     ("return",       EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
@@ -73,7 +100,8 @@ _EVENTS: list[tuple[str, EV]] = [
 _GENERIC = EV("news", "ANNOUNCED", "RUMORED", "NEWS", "#f5a623")
 _VERBY = {"returns", "release", "premiere", "new_season", "movie", "finale", "delay",
           "hiatus", "cancel", "leak", "manga", "confirm", "announce", "trailer",
-          "visual", "game", "collab", "casting", "ongoing"}
+          "visual", "game", "collab", "casting", "ongoing", "box_office", "award",
+          "anniversary", "dub", "live_action", "adaptation", "spinoff", "sequel", "record"}
 
 _TENTATIVE = ("leak", "rumor", "rumour", "reportedly", "unconfirmed", "not yet official",
               "not official", "alleged", "supposedly", "might ", "could ", "possibly",
@@ -88,6 +116,10 @@ def _event_of(text: str) -> tuple[EV, bool]:
         if kw in low:
             return ev, tentative
     return _GENERIC, tentative
+
+
+def _is_cjk(s: str) -> bool:
+    return any(0x3000 <= ord(c) <= 0x9FFF or 0xFF00 <= ord(c) <= 0xFFEF for c in (s or ""))
 
 
 def _badges(text: str, tentative: bool) -> list:
@@ -133,16 +165,20 @@ def _clean_series(title: str, line: str) -> str:
 
 
 def enrich_panel(panel: Panel, line: str) -> str:
-    """Fill the verb-forward fields on a parsed panel from its source line.
-    Returns the event key (used to decide the lineup style)."""
-    scan = " ".join(x for x in (line, panel.title, panel.tag_main) if x)
+    """Fill any missing verb-forward fields on a parsed panel from its source
+    line. Respects values the LLM already provided (verb/subtitle/badges) and
+    fills the gaps deterministically. Returns the event key (drives the style)."""
+    scan = " ".join(x for x in (line, panel.verb, panel.title, panel.tag_main) if x)
     ev, tentative = _event_of(scan)
-    verb = ev.verb_t if (tentative and ev.key not in ("leak", "delay", "hiatus", "cancel")) else ev.verb
     date = _extract_date(scan)
     panel.title = _clean_series(panel.title, line)
-    panel.verb = verb
-    panel.subtitle = _subtitle(ev, scan, date, tentative)
-    panel.badges = _badges(scan, tentative)
+    if not panel.verb:
+        panel.verb = ev.verb_t if (tentative and ev.key not in ("leak", "delay", "hiatus", "cancel")) else ev.verb
+    # verb-forward wants a status line here; a CJK subtitle is the JP title, replace it
+    if not panel.subtitle or _is_cjk(panel.subtitle):
+        panel.subtitle = _subtitle(ev, scan, date, tentative)
+    if not panel.badges and tentative:
+        panel.badges = _badges(scan, tentative)
     if ev.tag and (not panel.tag_main or panel.tag_main in ("NEW INFO", "SEASON 1")):
         panel.tag_main = ev.tag
     if not panel.accent:
@@ -225,11 +261,15 @@ def _split_items(text: str) -> list:
     return out
 
 
-def _pick_lineup_style(event_keys: list) -> str:
+def _pick_lineup_style(panels: list, event_keys: list) -> str:
     n = len(event_keys)
     if not n:
         return "spotlight"
-    verby = sum(1 for k in event_keys if k in _VERBY)
+    verby = 0
+    for p, k in zip(panels, event_keys):
+        v = (p.verb or "").upper()
+        if k in _VERBY or (v and v not in ("", "NEWS", "ANNOUNCED")):
+            verby += 1
     return "returns" if verby / n >= 0.5 else "spotlight"
 
 
@@ -239,13 +279,16 @@ def _pick_news_template(post: NewsPost, ev: EV, tentative: bool) -> str:
         return "breaking"
     if ev.key in ("release", "premiere") or "RELEASE" in cat:
         return "release"
-    if ev.key == "trailer" or "TRAILER" in cat:
+    if ev.key in ("trailer", "visual") or "TRAILER" in cat:
+        return "poster"
+    if ev.key in ("box_office", "award", "record", "anniversary"):
         return "poster"
     if ev.key == "finale":
         return "stamp"
     if "QUOTE" in cat or "interview" in (post.headline or "").lower():
         return "quote"
-    if ev.key in ("movie", "game"):
+    if ev.key in ("movie", "game", "casting", "live_action", "adaptation", "sequel",
+                  "spinoff", "collab", "dub"):
         return "topbar"
     return "bottom"
 
@@ -272,12 +315,46 @@ class AutoPlan:
     provider_used: str = "none"
 
 
+_ROUTE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "mode": {"type": "string", "enum": ["ranking", "lineup", "news"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["mode"],
+    "additionalProperties": False,
+}
+
+_ROUTE_SYSTEM = """You triage anime/manga news text for a graphics tool. Read it \
+(it may be a full article or several paragraphs) and pick the ONE best format:
+- "ranking": a Top-N / ranked list of characters, shows, or moments (even if the \
+list is written as prose or numbered, or buried inside an article).
+- "lineup": several SEPARATE updates about DIFFERENT series (2+), each with its own \
+status — returns, release, trailer, leak, collab, award, casting, box office, etc.
+- "news": a SINGLE story about one thing (one headline), even a long article.
+Return JSON only."""
+
+
+def _llm_route(text: str, prov) -> str | None:
+    if prov is None:
+        return None
+    try:
+        data = prov.complete_json(_ROUTE_SYSTEM, f"Text:\n\n{text}", _ROUTE_SCHEMA)
+        m = data.get("mode") if isinstance(data, dict) else None
+        if m in ("ranking", "lineup", "news"):
+            return m
+    except Exception:
+        pass
+    return None
+
+
 def auto_design(text: str, settings, opts=None, provider=None, progress=None) -> AutoPlan:
     from .pipeline import GenerateOptions
     opts = opts or GenerateOptions()
     prov = provider if provider is not None else get_text_provider(settings, opts.provider)
     pu = getattr(prov, "name", "none")
-    mode = route(text)
+    # an AI reads the whole thing (great for pasted articles); heuristics back it up
+    mode = _llm_route(text, prov) or route(text)
     if progress:
         progress(f"auto-design: read this as a {mode} post (provider: {pu})")
 
@@ -299,7 +376,7 @@ def auto_design(text: str, settings, opts=None, provider=None, progress=None) ->
             if src is None:
                 src = lines[i] if i < len(lines) else ""
             keys.append(enrich_panel(p, (src + " " + p.title).strip()))
-        style = _pick_lineup_style(keys)
+        style = _pick_lineup_style(panels, keys)
         verbs = ", ".join(dict.fromkeys(p.verb for p in panels if p.verb)) or "updates"
         look = "verb-forward" if style == "returns" else "art-forward"
         why = f"{len(panels)} status updates ({verbs}) → line-up, {look} “{style}”"

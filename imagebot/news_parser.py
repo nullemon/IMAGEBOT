@@ -34,6 +34,8 @@ PANEL_SCHEMA = {
                     "tag_main": {"type": "string", "description": "e.g. SEASON 4, MOVIE, NEW ARC, FINALE, NEW PV"},
                     "tag_sub": {"type": "string", "description": "e.g. NEW INFO, RELEASE DATE, PRE-LAUNCH"},
                     "date_text": {"type": "string", "description": "short date like 'JULY 3', or empty"},
+                    "verb": {"type": "string", "description": "a punchy ACTION word for a big verb-forward headline: RETURNS, RELEASED, CONFIRMED, DELAYED, LEAKED, REVEALED, PREMIERES, WINS, CAST, ENDING, SMASHES, etc. Use the -ING form (RETURNING) when the news is tentative/unconfirmed."},
+                    "confidence": {"type": "string", "description": "official | confirmed | leak | rumor | unconfirmed — based on how sure the source is"},
                     "logo_style": {"type": "string", "enum": ["auto", "sans", "serif", "heavy"]},
                     "theme": {"type": "string", "description": "auto, or a colour mood: gold/navy/crimson/violet/forest/slate"},
                     "query": {"type": "string", "description": "Google Images search query for the official key visual / character art"},
@@ -48,10 +50,16 @@ PANEL_SCHEMA = {
 }
 
 _SYSTEM = """You are an editor for an anime news Instagram account. You convert raw \
-news notes into structured announcement panels for a graphic.
+news notes — or a full article / several paragraphs — into structured announcement \
+panels for a graphic.
 
 Rules:
 - One panel per distinct series/title.
+- verb: the single best ACTION word for a big headline (RETURNS, RELEASED, \
+CONFIRMED, DELAYED, LEAKED, REVEALED, WINS, CAST, ENDING, SMASHES …); -ING form \
+when unconfirmed.
+- confidence: official/confirmed for sourced news; leak/rumor/unconfirmed when the \
+note says leak, rumor, reportedly, not yet official, etc.
 - title: the franchise name in English (Latin script), as it would appear as a logo.
 - subtitle: the original/Japanese title ONLY if you are confident; otherwise "".
 - tag_main: a short status badge in CAPS — SEASON N, MOVIE, NEW ARC, FINALE, NEW PV, \
@@ -88,6 +96,10 @@ def parse_news(text: str, settings, provider=None, max_panels: int = 8,
                     p = Panel.from_dict(item)
                     if not p.tag_sub:
                         p.tag_sub = default_tag_sub
+                    conf = (item.get("confidence") or "").lower()
+                    if not p.badges and any(k in conf for k in ("leak", "rumor", "rumour", "unconfirmed")):
+                        p.badges = ["RUMOR" if ("rumor" in conf or "rumour" in conf) else "LEAK",
+                                    "UNCONFIRMED"]
                     panels.append(p)
             if panels:
                 return panels
@@ -167,7 +179,8 @@ NEWS_POST_SCHEMA = {
 }
 
 _NEWS_SYSTEM = """You are an editor for an anime-news Instagram page. Turn the \
-user's note into ONE news post.
+user's note — which may be a full article or several paragraphs — into ONE news \
+post by extracting the key facts.
 - headline: a clear, punchy news sentence (sentence case, not ALL CAPS).
 - category: a short label — NEWS, BREAKING, RELEASE DATE, RANKING, TRAILER, \
 NEW SEASON, MANGA, etc. Infer it.
@@ -304,8 +317,9 @@ RANKING_SCHEMA = {
 }
 
 _RANKING_SYSTEM = """You are an editor for an anime-news Instagram page that \
-posts Top-N ranking graphics (like Anime Corner). Turn the user's note/list into \
-one structured ranking.
+posts Top-N ranking graphics (like Anime Corner). Turn the user's note/list — \
+which may be a full article or prose — into one structured ranking by pulling out \
+the ranked items in order.
 - title: a short headline in CAPS, e.g. "TOP 10 FEMALE CHARACTERS". Keep the \
 user's wording if given; otherwise infer it from the list.
 - subtitle: a sub-line such as the poll/source/week, e.g. "BASED ON SPRING 2026 \

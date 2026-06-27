@@ -12,14 +12,23 @@ key, and every choice is explained back to you ("✨ Auto-picked: …").
 Code: [`imagebot/autopilot.py`](../imagebot/autopilot.py).
 
 ```
-pasted text
+pasted text  (a line, a few updates, a Top-N list, OR a full article)
   │  1. ROUTE      → which mode?   ranking | line-up | single-news
-  │  2. PARSE      → structure it  (LLM parser, rule-based fallback)
-  │  3. ENRICH     → per item: event → verb, subtitle, badges, tag, accent, date, query
+  │                  (an AI reads the whole thing — great for articles — heuristics back it up)
+  │  2. PARSE      → structure it  (LLM extracts facts incl. verb + confidence; rule-based fallback)
+  │  3. ENRICH     → fill gaps: event → verb, subtitle, badges, tag, accent, date, query
   │  4. DECIDE     → exact template/style + size
   ▼
 render-ready plan  →  normal render path  →  fully editable result
 ```
+
+**Paste an article and it figures out the list.** With an AI provider configured,
+step 1 reads the whole article and routes it, and step 2's parsers pull the
+structure straight out of prose (a ranking article → the ranked entries; a roundup
+→ the line-up; a single story → one post). The LLM also fills the hero **verb** and
+**confidence** per item; the deterministic engine fills whatever it leaves blank, so
+it's complete and polished either way. With no key, the rule-based router handles
+lines/lists (an article still works best with a provider).
 
 ---
 
@@ -57,8 +66,20 @@ Each item is matched against a keyword table (`_EVENTS`) → an **event type**, 
 | cancel | CANCELLED | CANCELLED | crimson |
 | leak | LEAKED | LEAK | violet |
 | manga chapter | RETURNS | MANGA | green |
-| game / collab / casting | ANNOUNCED / REVEALED | GAME / COLLAB / CASTING | — |
+| game / collab / crossover | ANNOUNCED / REVEALED | GAME / COLLAB | pink |
+| casting / voice actor | CAST / JOINS | VOICE CAST | blue |
+| box office | SMASHES | BOX OFFICE | green |
+| award / anime of the year | WINS | AWARD | gold |
+| record / most-watched | BREAKS RECORDS | RECORD | green |
+| anniversary | CELEBRATES | ANNIVERSARY | gold |
+| live action | CONFIRMED | LIVE ACTION | violet |
+| anime adaptation | GETS ANIME | ANIME ADAPTATION | gold |
+| sequel / spin-off | CONFIRMED / ANNOUNCED | SEQUEL / SPIN-OFF | blue |
+| english dub | DUBBED | ENGLISH DUB | blue |
 | (anything else) | ANNOUNCED | NEWS | gold |
+
+The hero **verb** and **confidence** can also come straight from the AI parser
+(richer phrasing on a pasted article); the table fills anything it leaves blank.
 
 **Confidence.** Markers like *leak, rumor, reportedly, unconfirmed, not yet
 official, allegedly, might/could* flip the item to **tentative** → the verb uses
