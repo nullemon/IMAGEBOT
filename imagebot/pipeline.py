@@ -620,3 +620,58 @@ def render_ranking_from_list(rl: RankingList, settings, opts: GenerateOptions, r
                          provider_used=getattr(prov, "name", "none"),
                          current={"key": template_key, "name": _RANK_NAME.get(template_key, template_key),
                                   "outputs": outputs})
+
+
+# ==========================================================================
+# Auto-design — paste anything, the brain picks mode + template + fields
+# ==========================================================================
+def prepare_auto(settings, opts: GenerateOptions, text: str, progress=None) -> dict:
+    """Classify the pasted text and resolve art/caption for whatever it is.
+    Returns a dict shaped per the chosen mode (panels | post | ranking) plus
+    the picked template and a human 'why', ready for the matching payload."""
+    from .autopilot import auto_design
+    prov = get_text_provider(settings, opts.provider)
+    pu = getattr(prov, "name", "none")
+    plan = auto_design(text, settings, opts, provider=prov, progress=progress)
+    out = {"mode": plan.mode, "template": plan.template, "why": plan.why,
+           "provider_used": pu, "size": plan.size}
+    if plan.mode == "ranking":
+        rl = plan.ranking
+        out["warnings"] = _resolve_ranking_art(rl, settings, opts, prov, progress)
+        out["ranking"] = rl
+        out["caption"] = ranking_caption(rl, settings, opts, provider=prov) if opts.write_caption else ""
+    elif plan.mode == "news":
+        post = plan.post
+        if post.items and not post.body:
+            post.body = "\n".join(str(x) for x in post.items)
+        if opts.date_text and not post.date_text:
+            post.date_text = opts.date_text
+        out["warnings"] = _resolve_post_art(post, settings, opts, prov, progress)
+        out["post"] = post
+        out["caption"] = news_caption(post, settings, opts, provider=prov) if opts.write_caption else ""
+    else:
+        panels = plan.panels
+        if opts.date_text:
+            for p in panels:
+                if not p.date_text:
+                    p.date_text = opts.date_text
+        out["warnings"] = resolve_art(panels, settings, opts, provider=prov, progress=progress)
+        out["panels"] = panels
+        out["caption"] = write_caption(panels, settings, opts, provider=prov) if opts.write_caption else ""
+    return out
+
+
+def make_auto(text: str, settings, opts: GenerateOptions | None = None, progress=None) -> dict:
+    """One-shot auto pipeline (CLI): classify → render the picked template."""
+    opts = opts or GenerateOptions()
+    ap = prepare_auto(settings, opts, text, progress=progress)
+    runid = time.strftime("%Y%m%d-%H%M%S")
+    mode, key = ap["mode"], ap["template"]
+    if mode == "ranking":
+        ap["outputs"] = render_ranking_one(ap["ranking"], settings, opts, key, runid)
+    elif mode == "news":
+        ap["outputs"] = render_news_one(ap["post"], settings, opts, key, runid)
+    else:
+        ap["outputs"] = render_one(ap["panels"], settings, opts, key, runid)
+    ap["runid"] = runid
+    return ap

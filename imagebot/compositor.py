@@ -725,6 +725,63 @@ def _layout_stack(ctx):
     _date(ctx, ml, y + int(u * 0.01), "left", maxw=0.5, maxh=0.18, start=0.28)
 
 
+def _layout_verbforward(ctx):
+    """The 'RETURNS' look: series pill on top, a GIANT action verb as the hero,
+    a subtitle line, and an optional confidence badge row (LEAK · UNCONFIRMED).
+    Carries its own left→right scrim so the words stay legible over any art."""
+    w, h, u, ml = ctx.w, ctx.h, ctx.u, ctx.ml
+    panel, draw = ctx.panel, ctx.draw
+    # guaranteed legibility scrim (independent of the style's own scrims)
+    sw = int(w * 0.74)
+    ctx.base.alpha_composite(_alpha_scrim(sw, h, (0, 0, 0), 210, 0))
+
+    y = ctx.cy0 + int(u * 0.05)
+    # series pill (the small coloured tag on top)
+    series = (panel.title or "").strip()
+    if series:
+        pf = ctx.fonts.font("ui", max(15, int(u * 0.085)))
+        maxpw = int(w * 0.6)
+        while pf.size > 14 and draw.textlength(series, font=pf) > maxpw:
+            pf = ctx.fonts.font("ui", pf.size - 2)
+        _, ph = draw_pill(draw, (ml, y), series, pf, ctx.accent,
+                          readable_text_color(ctx.accent),
+                          pad_x=int(w * 0.022), pad_y=int(u * 0.03),
+                          radius=int(u * 0.05))
+        y += ph + int(u * 0.045)
+
+    # the giant verb (hero)
+    verb = (panel.verb or panel.tag_main or "NEWS").strip().upper()
+    vf = ctx.fonts.fit(draw, verb, "logo_heavy", int(w * 0.66), int(u * 0.38),
+                       start=int(u * 0.46))
+    _, vt, _, vb = draw.textbbox((0, 0), verb, font=vf)
+    draw_text(draw, (ml, y), verb, vf, WHITE, shadow_off=(3, 4))
+    y += (vb - vt) + int(u * 0.035)
+
+    # subtitle line
+    sub = (panel.subtitle or panel.date_text or "").strip()
+    if sub:
+        sf = ctx.fonts.fit(draw, sub, "ui", int(w * 0.62), int(u * 0.12),
+                           start=int(u * 0.11))
+        _, st, _, sb = draw.textbbox((0, 0), sub, font=sf)
+        draw_text(draw, (ml, y), sub, sf, (240, 240, 245))
+        y += (sb - st) + int(u * 0.045)
+
+    # confidence badge row (first = solid accent, rest = solid dark)
+    badges = [str(x).strip().upper() for x in (panel.badges or []) if str(x).strip()]
+    if badges:
+        bf = ctx.fonts.font("ui", max(12, int(u * 0.052)))
+        padx, pady = int(w * 0.016), int(u * 0.024)
+        bx = ml
+        for i, bdg in enumerate(badges[:3]):
+            bg = ctx.accent if i == 0 else (16, 16, 20)
+            fg = readable_text_color(bg) if i == 0 else WHITE
+            l0, t0, r0, b0 = draw.textbbox((0, 0), bdg, font=bf)
+            bw, bh = (r0 - l0) + 2 * padx, (b0 - t0) + 2 * pady
+            draw.rectangle([bx, y, bx + bw, y + bh], fill=bg + (255,) if len(bg) == 3 else bg)
+            draw_text(draw, (bx + padx - l0, y + pady - t0), bdg, bf, fg, shadow=False)
+            bx += bw + int(w * 0.012)
+
+
 _LAYOUTS = {
     "classic": _layout_classic, "center": _layout_center, "mirror": _layout_mirror,
     "sidebar": _layout_sidebar, "bottombar": _layout_bottombar,
@@ -734,6 +791,7 @@ _LAYOUTS = {
     "ribbon": _layout_ribbon, "halfsplit": _layout_halfsplit,
     "minimal": _layout_minimal, "bigtype": _layout_bigtype,
     "breaking": _layout_breaking, "stack": _layout_stack,
+    "verbforward": _layout_verbforward,
 }
 
 

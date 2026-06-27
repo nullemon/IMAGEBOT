@@ -124,6 +124,14 @@ STYLE_PRESETS: list[Style] = [
     Style("aesthetic", "Aesthetic", layout="minimal", blur=4, darken=40,
           scrim_bottom=80, accent="#ffffff", accent_mode="fixed",
           title_role="serif"),
+    # --- verb-forward "RETURNS" look (auto-design's default for status news) ---
+    Style("returns", "Returns", layout="verbforward", scrim_left=0, darken=26,
+          accent_mode="series", title_role="heavy"),
+    Style("returns_gold", "Returns Gold", layout="verbforward", scrim_left=0,
+          darken=30, accent="#f5a623", accent_mode="fixed", title_role="heavy"),
+    Style("leak", "Leak", layout="verbforward", scrim_left=0, darken=34,
+          tint="#5b2bff", tint_alpha=34, accent="#b07cff", accent_mode="fixed",
+          title_role="heavy"),
 ]
 
 _BY_KEY = {s.key: s for s in STYLE_PRESETS}

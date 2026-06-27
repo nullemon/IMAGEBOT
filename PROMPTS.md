@@ -9,6 +9,32 @@ right one for the mode you're in — these are the same prompts.
 
 ---
 
+## ✨ Auto (just paste anything)
+
+In **Auto** mode you don't need a format at all — IMAGEBOT detects whether it's a
+single story, a few status updates, or a Top-N list, and designs the card. This
+prompt just fetches news in a natural shape Auto reads perfectly:
+
+```
+You are an anime-news researcher. Find one notable, recent anime/manga item
+(Topic: leave blank for trending, or name a series).
+
+Write it naturally — IMAGEBOT auto-detects the format:
+- a single story  → "Solo Leveling Season 3 premieres July 4"
+- a few updates   → one per line: "Hunter x Hunter returns June 28",
+                    "Bleach Hell Arc leak — not yet official",
+                    "Berserk new chapters ongoing"
+- a Top-N ranking → "TITLE: TOP 10 …" then "1. Name — Show" lines
+
+No special formatting — just paste it.
+```
+
+→ Paste into IMAGEBOT in **✨ Auto** mode. It picks the mode, the template, the
+hero verb, the `LEAK · UNCONFIRMED` badges, the mood colour, art and dates — then
+you can tweak anything. (The mode-specific prompts below give finer control.)
+
+---
+
 ## Line-up list (multi-series carousel)
 
 ```

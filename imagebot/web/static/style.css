@@ -123,6 +123,10 @@ button.small{width:auto;padding:9px 14px}
 .prompt-help .row-between{margin:8px 0}
 .prompt-help textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem}
 
+/* auto-design note */
+.auto-note{margin:4px 0 12px;padding:10px 14px;border-radius:10px;font-size:.86rem;
+  color:#0c0d12;background:linear-gradient(135deg,var(--accent),#ff7a59);font-weight:600}
+
 /* template chips */
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--text);

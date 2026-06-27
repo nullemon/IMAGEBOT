@@ -137,6 +137,36 @@ def _cmd_rank(args) -> int:
     return 0
 
 
+def _cmd_auto(args) -> int:
+    settings = get_settings()
+    if args.file:
+        news = open(args.file, "r", encoding="utf-8").read()
+    elif args.text:
+        news = args.text
+    else:
+        news = sys.stdin.read()
+    if not news.strip():
+        print("No text provided (use --text, --file, or stdin).", file=sys.stderr)
+        return 2
+    from .pipeline import make_auto
+    _w, _h = SIZES.get(args.size, SIZES["portrait"])
+    opts = GenerateOptions(
+        provider=args.provider, width=_w, height=_h,
+        find_art=not args.no_art, vision_pick=not args.no_vision,
+        clean_art=args.clean, write_caption=not args.no_caption,
+    )
+    ap = make_auto(news, settings, opts, progress=lambda m: print("  ·", m))
+    print(f"\n✨ Auto: {ap['why']}")
+    print(f"   mode={ap['mode']} · template={ap['template']} · run={ap['runid']} · provider={ap['provider_used']}")
+    for w in ap.get("warnings", []):
+        print("  ⚠", w)
+    for o in ap.get("outputs", []):
+        print(f"   → {o['account'] or 'card'}: {o['cards'][0]}")
+    if ap.get("caption"):
+        print("\nCaption:\n" + ap["caption"])
+    return 0
+
+
 def _cmd_web(args) -> int:
     from .web import create_app
     settings = get_settings()
@@ -188,6 +218,17 @@ def main(argv=None) -> int:
     nw.add_argument("--ai-art", action="store_true")
     nw.add_argument("--no-caption", action="store_true")
     nw.set_defaults(func=_cmd_news)
+
+    au = sub.add_parser("auto", help="paste anything — auto-detect type + design the card")
+    au.add_argument("--text", help="the news / list / story")
+    au.add_argument("--file", help="read the text from a file")
+    au.add_argument("--provider", choices=["claude", "openai", "gemini", "grok", "auto", "none"], default=None)
+    au.add_argument("--size", choices=list(SIZES), default="portrait", help="output size")
+    au.add_argument("--no-art", action="store_true")
+    au.add_argument("--no-vision", action="store_true")
+    au.add_argument("--clean", action="store_true")
+    au.add_argument("--no-caption", action="store_true")
+    au.set_defaults(func=_cmd_auto)
 
     rk = sub.add_parser("rank", help="make a Top-N ranking card (Anime-Corner style)")
     rk.add_argument("--list", help="the ranking text / list")

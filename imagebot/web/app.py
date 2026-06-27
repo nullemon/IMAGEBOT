@@ -19,7 +19,7 @@ from ..models import Panel, NewsPost, RankingList
 from ..pipeline import (GenerateOptions, build_carousel, render_one,
                         prepare_lineup, prepare_news, render_news_one,
                         render_news_from_post, prepare_ranking, render_ranking_one,
-                        render_ranking_from_list, DEFAULT_RANK, SIZES)
+                        render_ranking_from_list, prepare_auto, DEFAULT_RANK, SIZES)
 from ..styles import all_styles
 from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
 from ..rankcard import rank_templates, RANK_TEMPLATES
@@ -152,6 +152,24 @@ def create_app(settings=None) -> Flask:
         opts = _opts_from(data)
         runid = time.strftime("%Y%m%d-%H%M%S")
         log: list[str] = []
+        if data.get("mode") == "auto":
+            ap = prepare_auto(settings, opts, news, progress=log.append)
+            m, current = ap["mode"], ap["template"]
+            if m == "ranking":
+                outputs = render_ranking_one(ap["ranking"], settings, opts, current, runid)
+                payload = ranking_payload(runid, ap["ranking"], current, outputs,
+                                          ap["provider_used"], ap["caption"], ap["warnings"], log)
+            elif m == "news":
+                outputs = render_news_one(ap["post"], settings, opts, current, runid)
+                payload = news_payload(runid, ap["post"], current, outputs,
+                                       ap["provider_used"], ap["caption"], ap["warnings"], log)
+            else:
+                outputs = render_one(ap["panels"], settings, opts, current, runid)
+                prep = {"panels": ap["panels"], "warnings": ap["warnings"],
+                        "provider_used": ap["provider_used"], "caption": ap["caption"]}
+                payload = lineup_payload(runid, prep, current, outputs, log)
+            payload["auto"] = ap["why"]
+            return jsonify(payload)
         if data.get("mode") == "ranking":
             opts.find_art = _bool(data.get("find_art"), True)
             prep = prepare_ranking(settings, opts, news, progress=log.append)

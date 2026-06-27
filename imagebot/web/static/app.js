@@ -1,7 +1,7 @@
 "use strict";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const FIELDS = ["title", "subtitle", "tag_main", "tag_sub", "date_text",
+const FIELDS = ["title", "subtitle", "verb", "badges", "tag_main", "tag_sub", "date_text",
   "logo_style", "theme", "query", "image_url", "image_path", "logo_path",
   "focus_x", "focus_y", "zoom"];
 const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
@@ -52,7 +52,16 @@ ITEMS:
 3. <Name> — <Anime it's from>
 ... up to 10, best first.`;
 
-let STATE = { mode: "lineup", runid: "", styles: [], current: "" };
+const AUTO_PROMPT = `You are an anime-news researcher. Find one notable, recent anime/manga item (Topic: leave blank for trending, or name a series).
+
+Just write it naturally — IMAGEBOT auto-detects the format and designs the card:
+- a single story  → "Solo Leveling Season 3 premieres July 4"
+- a few updates   → one per line: "Hunter x Hunter returns June 28", "Bleach Hell Arc leak — not yet official", "Berserk new chapters ongoing"
+- a Top-N ranking → "TITLE: TOP 10 …" then "1. Name — Show" lines
+
+No special formatting needed — paste it and hit Make.`;
+
+let STATE = { mode: "auto", runid: "", styles: [], current: "" };
 let ALL_EDITORS = [];
 let NEWS_PE = null;
 
@@ -195,7 +204,7 @@ function refreshAllAspects() {
   else if (STATE.mode === "news" && NEWS_PE) NEWS_PE.setAspect(newsAspect());
 }
 
-const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || "lineup";
+const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || "auto";
 function collectAccounts() {
   const accs = [];
   $$(".acc:checked").forEach((c) => accs.push({
@@ -257,7 +266,7 @@ async function switchTemplate(key) {
   STATE.current = key; markActive();
   const pc = $("#preview-cards"); pc.style.opacity = "0.45";
   try {
-    const payload = { runid: STATE.runid, style: key, ...options() };
+    const payload = { runid: STATE.runid, style: key, ...options(), mode: STATE.mode };
     if (STATE.mode === "news") payload.post = collectPost();
     else if (STATE.mode === "ranking") payload.ranking = collectRanking();
     else payload.panels = collectPanels();
@@ -287,6 +296,13 @@ function showResult(data) {
   STATE.runid = data.runid; STATE.styles = data.styles; STATE.current = data.current ? data.current.key : "";
   ALL_EDITORS = ALL_EDITORS.filter((pe) => document.contains(pe.cv));
   $("#empty").classList.add("hidden");
+  // auto mode resolved to a concrete mode (radio stays on ✨ Auto; STATE.mode
+  // tracks what it became so edits/switches route correctly)
+  const an = $("#auto-note");
+  if (data.auto) {
+    an.textContent = "✨ Auto-picked: " + data.auto + " — tweak below, or switch templates / mode to override.";
+    an.classList.remove("hidden");
+  } else { an.classList.add("hidden"); }
   $("#run-note").textContent = `run ${data.runid} · ${data.styles.length} templates · ${data.provider_used}`;
   $("#provider-note").textContent = "provider: " + data.provider_used;
   $("#dl-zip").classList.toggle("hidden", STATE.mode !== "lineup");
@@ -327,7 +343,10 @@ function collectPost() {
 // ---- lineup editor --------------------------------------------------------
 function buildRow(panel) {
   const row = $("#panel-row").content.cloneNode(true).querySelector(".prow");
-  FIELDS.forEach((f) => { const el = row.querySelector(`[data-f="${f}"]`); if (el && panel[f] != null) el.value = panel[f]; });
+  FIELDS.forEach((f) => {
+    const el = row.querySelector(`[data-f="${f}"]`);
+    if (el && panel[f] != null) el.value = Array.isArray(panel[f]) ? panel[f].join(", ") : panel[f];
+  });
   if (panel.logo_path) row.querySelector(".art-state").textContent = "✓ logo";
   const pe = attachEditor(row, "panel", panel.art_url || "", 0.6, 0.4);
   row._pe = pe;
@@ -440,7 +459,7 @@ async function generate() {
 }
 async function applyEdits() {
   setBusy(true, "Applying edits & refreshing art…");
-  const payload = { style: STATE.current, runid: STATE.runid, ...options() };
+  const payload = { style: STATE.current, runid: STATE.runid, ...options(), mode: STATE.mode };
   if (STATE.mode === "news") payload.post = collectPost();
   else if (STATE.mode === "ranking") payload.ranking = collectRanking();
   else payload.panels = collectPanels();
@@ -464,9 +483,12 @@ function onModeChange() {
     ? "Paste your list, e.g.\nTITLE: TOP 10 FEMALE CHARACTERS\nSUBTITLE: BASED ON SPRING 2026 WEEK 11\nITEMS:\n1. Frieren — Frieren: Beyond Journey's End\n2. Anya Forger — Spy x Family\n3. Power — Chainsaw Man"
     : m === "news"
       ? "Paste one news story, e.g.\nAttack on Titan Final Season gets a new trailer at Anime Expo — out July 4"
-      : "One announcement per line, e.g.\nAttack on Titan Season 4 new info — June 19\nJujutsu Kaisen movie — July 3";
-  $("#ai-prompt").value = m === "ranking" ? RANK_PROMPT : m === "news" ? NEWS_PROMPT : LINEUP_PROMPT;
+      : m === "lineup"
+        ? "One announcement per line, e.g.\nAttack on Titan Season 4 new info — June 19\nJujutsu Kaisen movie — July 3"
+        : "Paste ANYTHING — one story, a few updates, or a Top-10 list. IMAGEBOT detects the type and designs it.\n\ne.g.\nHunter x Hunter returns June 28\nBleach Hell Arc — leak, not yet official\nBerserk new chapters ongoing";
+  $("#ai-prompt").value = m === "ranking" ? RANK_PROMPT : m === "news" ? NEWS_PROMPT : m === "lineup" ? LINEUP_PROMPT : AUTO_PROMPT;
   ["#templates", "#preview-wrap", "#editor"].forEach((s) => $(s).classList.add("hidden"));
+  $("#auto-note").classList.add("hidden");
   $("#empty").classList.remove("hidden");
 }
 

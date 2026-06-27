@@ -237,15 +237,22 @@ def _heuristic_news_post(text: str) -> NewsPost:
     )
 
 
-def _heuristic_parse(text: str, default_tag_sub: str, max_panels: int) -> list[Panel]:
-    # split into items: blank-line groups, then bullets/newlines
-    chunks = re.split(r"\n\s*\n", text) if "\n\n" in text else text.splitlines()
+def _item_lines_for_autopilot(text: str) -> list[str]:
+    """The raw per-item source lines (same split the heuristic parser uses).
+    Autopilot maps each parsed panel back to its line to read verb/date/leak cues."""
+    chunks = re.split(r"\n\s*\n", text) if "\n\n" in text else (text or "").splitlines()
     items = []
     for c in chunks:
-        for line in re.split(r"\n|;|•|•|\* ", c):
+        for line in re.split(r"\n|;|•|\* ", c):
             line = line.strip(" -–—\t")
-            if len(line) >= 2:
+            if len(line) >= 2 and not re.match(r"(?i)^(title|subtitle|source|date)\s*:", line):
                 items.append(line)
+    return items
+
+
+def _heuristic_parse(text: str, default_tag_sub: str, max_panels: int) -> list[Panel]:
+    # split into items: blank-line groups, then bullets/newlines
+    items = _item_lines_for_autopilot(text)
     if not items:
         items = [text]
 

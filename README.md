@@ -1,17 +1,23 @@
 # IMAGEBOT — anime news card maker
 
-Paste a line of news → get a **gallery of ~31 ready-to-post templates (make one, switch instantly)** to
-pick from, in the “ANIME EXPO” line-up look: stacked panels with the series art,
-a logo, status pills (`SEASON 4` · `NEW INFO`), the event wordmark, and a big
-date — plus an auto-written caption and one-click **carousel export**.
+**✨ Paste anything → the right card.** Auto mode reads your text, figures out the
+*type* of post (a single story, a few status updates, or a Top-10 list), picks the
+template, and fills every field — the giant verb, confidence badges, status tags,
+mood colours, art and dates — so it looks right in one click. Then it's all
+editable.
 
-Three modes: **line-up lists** (multi-series carousels), **single-story news posts**,
-and **Top-N ranking lists** (the Anime-Corner leaderboard look). Run several pages?
-Pick up to **4 of your handles** per generate and each render comes out stamped with
-that @username.
+![auto verb-forward](samples/preview_returns.png)
 
-Every image is **drag-to-move + scroll-to-zoom** — frame each photo right in the
-browser, no guesswork.
+*(Above: typed `Hunter x Hunter returns June 28` / `Bleach Hell Arc — leak, not yet
+official` / `Berserk new chapters ongoing` → Auto chose the verb-forward line-up,
+wrote the verbs, the `LEAK · UNCONFIRMED` badges, and the mood colours.)*
+
+Under the hood it's a transparent classify → enrich → decide engine
+([docs/AUTODESIGN.md](docs/AUTODESIGN.md)) on top of four render modes —
+**Auto ✨**, **line-up lists**, **single-story news posts**, and **Top-N rankings**
+(the Anime-Corner leaderboard). You also get an auto-written caption, one-click
+**carousel export**, up to **4 of your handles** per generate (each render stamped
+with that @username), and **drag-to-move + scroll-to-zoom** framing on every photo.
 
 Runs **locally**. On an Ubuntu box with a GPU it also does background cut-outs,
 AI upscaling, OCR watermark clean-up, and local Stable-Diffusion art.
@@ -183,6 +189,11 @@ python -m imagebot rank --list "TITLE: TOP 10 FEMALE CHARACTERS
 2. Anya Forger — Spy x Family
 3. Power — Chainsaw Man" --template corner
 
+# ✨ auto — paste anything, it detects the type and designs the card
+python -m imagebot auto --text "Hunter x Hunter returns June 28
+Bleach Hell Arc — leak, not yet official
+Berserk new chapters ongoing"
+
 python -m imagebot web --port 8777     # launch the UI
 ```
 
@@ -199,6 +210,7 @@ imagebot/
   compositor.py     Pillow engine — backgrounds, scrims, effects, logos, dates, cover
   newscard.py       16 single-story news-post templates (wrapped headlines)
   rankcard.py       6 Top-N ranking templates (Anime-Corner leaderboard look)
+  autopilot.py      ✨ auto-design brain: classify -> enrich -> pick mode+template
   enhance.py        OPTIONAL GPU: rembg cutout · Real-ESRGAN upscale · OCR · LaMa inpaint
   logos.py          local logo library + upload + auto search/download
   news_parser.py    news text -> Panels / NewsPost / RankingList (LLM, rule-based fallback)

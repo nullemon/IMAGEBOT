@@ -1,6 +1,7 @@
 """Core data structures shared across the pipeline."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
@@ -13,6 +14,8 @@ class Panel:
     tag_main: str = "SEASON 1"       # left pill, e.g. "SEASON 4" / "MOVIE" / "NEW ARC"
     tag_sub: str = "NEW INFO"        # right pill, e.g. "NEW INFO" / "PRE-LAUNCH"
     date_text: str = ""              # big right-side date, e.g. "JULY 3"
+    verb: str = ""                   # verb-forward hero word, e.g. "RETURNS" / "RETURNING"
+    badges: list = field(default_factory=list)  # confidence chips, e.g. ["LEAK","UNCONFIRMED"]
     accent: str = ""                 # hex pill colour; "" -> theme/auto
     theme: str = "auto"              # background gradient theme when no art
     logo_style: str = "auto"         # auto | sans | serif | heavy
@@ -34,7 +37,11 @@ class Panel:
     @classmethod
     def from_dict(cls, d: dict) -> "Panel":
         allowed = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
-        return cls(**{k: v for k, v in d.items() if k in allowed})
+        out = {k: v for k, v in d.items() if k in allowed}
+        b = out.get("badges")
+        if isinstance(b, str):       # the UI sends a comma string -> a list
+            out["badges"] = [x.strip() for x in re.split(r"[,/|]+", b) if x.strip()]
+        return cls(**out)
 
 
 @dataclass

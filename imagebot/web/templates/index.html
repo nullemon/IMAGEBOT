@@ -27,7 +27,8 @@
     <div class="row-between">
       <h2>1 · Paste your news</h2>
       <div class="mode-toggle">
-        <label><input type="radio" name="mode" value="lineup" checked /> Line-up list</label>
+        <label><input type="radio" name="mode" value="auto" checked /> ✨ Auto</label>
+        <label><input type="radio" name="mode" value="lineup" /> Line-up list</label>
         <label><input type="radio" name="mode" value="news" /> News post</label>
         <label><input type="radio" name="mode" value="ranking" /> Ranking list</label>
       </div>
@@ -97,6 +98,7 @@ Solo Leveling Season 3 — July 4"></textarea>
     <div class="row-between"><h2>2 · Pick a template <small class="muted">— click to swap instantly</small></h2>
       <span id="run-note" class="muted"></span></div>
     <div id="empty" class="empty">Make a card, then click any of the {{ styles|length }} templates to drop your news into it — no re-generating.</div>
+    <div id="auto-note" class="auto-note hidden"></div>
     <div id="templates" class="chips hidden"></div>
     <ul id="warnings" class="warnings"></ul>
 
@@ -189,6 +191,8 @@ Solo Leveling Season 3 — July 4"></textarea>
       <div class="prow-grid">
         <label>Title<input data-f="title" type="text" /></label>
         <label>Subtitle<input data-f="subtitle" type="text" placeholder="optional" /></label>
+        <label>Verb <small>(big word)</small><input data-f="verb" type="text" placeholder="e.g. RETURNS" /></label>
+        <label>Confidence <small>(comma)</small><input data-f="badges" type="text" placeholder="LEAK, UNCONFIRMED" /></label>
         <label>Tag<input data-f="tag_main" type="text" /></label>
         <label>Badge<input data-f="tag_sub" type="text" /></label>
         <label>Date<input data-f="date_text" type="text" /></label>
