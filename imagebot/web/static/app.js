@@ -493,6 +493,59 @@ function onModeChange() {
 }
 
 // ---- wiring ---------------------------------------------------------------
+// ---- API keys / settings --------------------------------------------------
+const SET_KEYS = ["anthropic_key", "openai_key", "gemini_key", "xai_key",
+  "serpapi_key", "google_api_key", "google_cse_id", "sd_url"];
+function updateProviderUI(providers, resolved) {
+  const pill = $("#ai-pill");
+  if (pill) {
+    pill.textContent = "AI: " + (providers.length ? providers.join(", ") : "none (rule-based)");
+    pill.className = "pill " + (providers.length ? "ok" : "warn");
+  }
+  const sel = $("#provider");
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="auto">auto (${resolved})</option>` +
+      providers.map((p) => `<option value="${p}">${p}</option>`).join("") +
+      `<option value="none">none (rule-based)</option>`;
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  }
+  const pn = $("#provider-note"); if (pn) pn.textContent = "provider: " + resolved;
+}
+async function openSettings() {
+  try {
+    const r = await fetch("/settings"); const d = await r.json();
+    SET_KEYS.forEach((k) => {
+      const el = $(`[data-k="${k}"]`); if (!el) return;
+      el.value = ""; const f = (d.fields || {})[k] || {};
+      el.placeholder = f.set ? ("saved · " + (f.hint || "set")) : "not set";
+    });
+    const tp = $(`[data-k="text_provider"]`); if (tp) tp.value = d.text_provider || "auto";
+    $("#settings-status").textContent = "";
+    $("#settings-modal").classList.remove("hidden");
+  } catch (e) { alert("Couldn't load settings: " + e.message); }
+}
+const closeSettings = () => $("#settings-modal").classList.add("hidden");
+async function saveSettings() {
+  const body = {};
+  SET_KEYS.forEach((k) => { const el = $(`[data-k="${k}"]`); if (el && el.value.trim()) body[k] = el.value.trim(); });
+  const tp = $(`[data-k="text_provider"]`); if (tp) body.text_provider = tp.value;
+  const btn = $("#save-settings"); btn.disabled = true;
+  $("#settings-status").textContent = "Saving…";
+  try {
+    const d = await postJSON("/settings", body);
+    updateProviderUI(d.providers || [], d.resolved || "none");
+    $("#settings-status").textContent = d.wrote === false ? ("⚠ " + (d.note || "applied, not saved")) : "✓ Saved — applied now";
+    if (d.wrote !== false) setTimeout(closeSettings, 800);
+  } catch (e) { $("#settings-status").textContent = "Error: " + e.message; }
+  finally { btn.disabled = false; }
+}
+$("#open-settings")?.addEventListener("click", openSettings);
+$("#close-settings")?.addEventListener("click", closeSettings);
+$("#save-settings")?.addEventListener("click", saveSettings);
+$("#settings-modal")?.addEventListener("click", (e) => { if (e.target.id === "settings-modal") closeSettings(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); });
+
 $("#copy-prompt").addEventListener("click", () => {
   navigator.clipboard.writeText($("#ai-prompt").value);
   const b = $("#copy-prompt"); b.textContent = "Copied!";

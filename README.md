@@ -89,8 +89,9 @@ ready-to-post PNGs (1080×1350) · caption · carousel .zip (with cover slide)
   branded with that account's @username + watermark (configure in `config.yaml`).
 - **Official logos** — upload a transparent PNG per series (saved to a local
   library and reused), or auto search→download→save. Overlaid instead of text.
-- **Multiple AI providers** — Claude, ChatGPT, Gemini, Grok. Use one or all; with
-  **no** key it still works (rule-based parser + keyless search).
+- **Multiple AI providers** — Claude, ChatGPT, Gemini, Grok. Add keys right in the
+  app (the **⚙ API keys** button — saved to `.env`, applied instantly, no restart);
+  use one or all. With **no** key it still works (rule-based parser + keyless search).
 - **Carousel export** — a cover slide + the line-up cards, zipped, 1080×1350.
 - **Any size** — portrait 4:5 (feed), square 1:1, story/reel 9:16, or landscape 16:9.
 - **AI research prompt** — a built-in copy-paste prompt (also in [`PROMPTS.md`](PROMPTS.md))
@@ -149,7 +150,12 @@ art (used as the AI-art fallback, no API cost).
 
 ---
 
-## API keys (`.env`) — all optional
+## API keys — all optional
+
+**Easiest: add them in the app.** Click **⚙ API keys** in the header, paste a key,
+**Save** — it applies instantly (no restart) and is written to `.env` on your
+machine, so it's there next time. You only need one AI key. (Or set the variables
+below in `.env` by hand if you prefer.)
 
 | Variable | Unlocks |
 |---|---|

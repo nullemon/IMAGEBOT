@@ -6,6 +6,8 @@ account's @username.
 """
 from __future__ import annotations
 
+import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 from flask import (Flask, jsonify, render_template, request,
                    send_from_directory, abort)
 
-from ..config import get_settings
+from ..config import get_settings, ROOT
 from ..image_search import CACHE_DIR
 from ..models import Panel, NewsPost, RankingList
 from ..pipeline import (GenerateOptions, build_carousel, render_one,
@@ -30,6 +32,36 @@ DEFAULT_STYLE = all_styles()[0].key
 NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
 RANK_NAME = {k: n for k, n in RANK_TEMPLATES}
 _STYLE_NAME = {s.key: s.name for s in all_styles()}
+
+# settings field (on the Settings object) -> .env variable name
+_KEY_FIELDS = {
+    "anthropic_key": "ANTHROPIC_API_KEY",
+    "openai_key": "OPENAI_API_KEY",
+    "gemini_key": "GEMINI_API_KEY",
+    "xai_key": "XAI_API_KEY",
+    "serpapi_key": "SERPAPI_KEY",
+    "google_api_key": "GOOGLE_API_KEY",
+    "google_cse_id": "GOOGLE_CSE_ID",
+    "sd_url": "IMAGEBOT_SD_URL",
+}
+
+
+def _update_env_file(path: Path, updates: dict) -> None:
+    """Upsert KEY=VALUE lines in .env, preserving everything else."""
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    out, seen = [], set()
+    for ln in lines:
+        m = re.match(r"\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=", ln)
+        if m and m.group(1) in updates:
+            out.append(f"{m.group(1)}={updates[m.group(1)]}")
+            seen.add(m.group(1))
+        else:
+            out.append(ln)
+    for k, v in updates.items():
+        if k not in seen:
+            out.append(f"{k}={v}")
+    path.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
 
 
 def _bool(v, default=False):
@@ -318,6 +350,53 @@ def create_app(settings=None) -> Flask:
         if base is None:
             abort(404)
         return send_from_directory(base.resolve(), relpath)
+
+    # ---- API keys (saved to .env, applied live) -------------------------
+    @app.get("/settings")
+    def settings_get():
+        def stat(v):
+            v = v or ""
+            return {"set": bool(v), "hint": ("•••• " + v[-4:]) if len(v) >= 6 else ("set" if v else "")}
+        return jsonify(ok=True,
+                       providers=settings.available_text_providers(),
+                       text_provider=settings.text_provider,
+                       resolved=settings.resolve_text_provider(),
+                       fields={f: stat(getattr(settings, f, "")) for f in _KEY_FIELDS})
+
+    @app.post("/settings")
+    def settings_post():
+        data = request.get_json(silent=True) or {}
+        updates = {}
+        for field, env in _KEY_FIELDS.items():
+            if field not in data:
+                continue
+            val = (data.get(field) or "").strip()
+            if val == "":                 # blank = leave the saved value untouched
+                continue
+            if val == "__CLEAR__":        # explicit clear
+                val = ""
+            setattr(settings, field, val)
+            os.environ[env] = val
+            updates[env] = val
+        tp = (data.get("text_provider") or "").strip().lower()
+        if tp in ("auto", "none", "claude", "openai", "gemini", "grok"):
+            settings.text_provider = tp
+            os.environ["IMAGEBOT_TEXT_PROVIDER"] = tp
+            updates["IMAGEBOT_TEXT_PROVIDER"] = tp
+        wrote = True
+        if updates:
+            try:
+                _update_env_file(ROOT / ".env", updates)
+            except Exception as e:
+                wrote = False
+                return jsonify(ok=True, saved=False, wrote=False, note=f"applied now, but couldn't write .env: {e}",
+                               providers=settings.available_text_providers(),
+                               text_provider=settings.text_provider,
+                               resolved=settings.resolve_text_provider())
+        return jsonify(ok=True, saved=True, wrote=wrote,
+                       providers=settings.available_text_providers(),
+                       text_provider=settings.text_provider,
+                       resolved=settings.resolve_text_provider())
 
     @app.get("/capabilities")
     def capabilities():

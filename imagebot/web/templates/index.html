@@ -10,17 +10,57 @@
   <header class="topbar">
     <div class="brand"><span class="logo">◆</span> IMAGEBOT</div>
     <div class="status-pills">
-      {% if providers %}<span class="pill ok">AI: {{ providers|join(', ') }}</span>
-      {% else %}<span class="pill warn">AI: none (rule-based)</span>{% endif %}
-      {% if search_keyed %}<span class="pill ok">search: keyed</span>
-      {% else %}<span class="pill">search: keyless</span>{% endif %}
+      <span id="ai-pill" class="pill {{ 'ok' if providers else 'warn' }}">AI: {{ providers|join(', ') if providers else 'none (rule-based)' }}</span>
+      {% if search_keyed %}<span id="search-pill" class="pill ok">search: keyed</span>
+      {% else %}<span id="search-pill" class="pill">search: keyless</span>{% endif %}
       {% if sd %}<span class="pill ok">local SD</span>{% endif %}
       {% set gpu = [] %}
       {% for k, v in caps.items() %}{% if v %}{% set _ = gpu.append(k) %}{% endif %}{% endfor %}
       {% if gpu %}<span class="pill ok" title="{{ gpu|join(', ') }}">GPU: {{ gpu|length }} on</span>
       {% else %}<span class="pill" title="install requirements-local.txt">GPU: off</span>{% endif %}
+      <button id="open-settings" class="ghost small" type="button" title="Add your AI API keys">⚙ API keys</button>
     </div>
   </header>
+
+  <!-- API keys / settings -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="row-between">
+        <h2 style="margin:0">API keys</h2>
+        <button id="close-settings" class="ghost small" type="button">✕</button>
+      </div>
+      <p class="hint">Paste a key and <b>Save</b> — it applies instantly and is stored in
+        <code>.env</code> on this computer (stays after restart, never leaves your machine).
+        Leave a box blank to keep what's already saved. You only need <b>one</b> AI key.</p>
+      <div class="set-grid">
+        <label>Claude <small>(Anthropic)</small><input data-k="anthropic_key" type="password" autocomplete="off" spellcheck="false" /></label>
+        <label>ChatGPT <small>(OpenAI)</small><input data-k="openai_key" type="password" autocomplete="off" spellcheck="false" /></label>
+        <label>Gemini <small>(Google)</small><input data-k="gemini_key" type="password" autocomplete="off" spellcheck="false" /></label>
+        <label>Grok <small>(xAI)</small><input data-k="xai_key" type="password" autocomplete="off" spellcheck="false" /></label>
+        <label>Default AI
+          <select data-k="text_provider">
+            <option value="auto">auto (first available)</option>
+            <option value="claude">Claude</option><option value="openai">ChatGPT</option>
+            <option value="gemini">Gemini</option><option value="grok">Grok</option>
+            <option value="none">none (rule-based)</option>
+          </select>
+        </label>
+      </div>
+      <details class="prompt-help">
+        <summary>Optional — better image search &amp; local art</summary>
+        <div class="set-grid">
+          <label>SerpApi key<input data-k="serpapi_key" type="password" autocomplete="off" spellcheck="false" /></label>
+          <label>Google API key<input data-k="google_api_key" type="password" autocomplete="off" spellcheck="false" /></label>
+          <label>Google CSE id<input data-k="google_cse_id" type="text" autocomplete="off" spellcheck="false" /></label>
+          <label>Local SD URL<input data-k="sd_url" type="text" placeholder="http://127.0.0.1:7860" /></label>
+        </div>
+      </details>
+      <div class="row-between" style="margin-top:14px">
+        <span id="settings-status" class="muted"></span>
+        <button id="save-settings" class="primary small" type="button">Save keys</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 1 · INPUT -->
   <section class="panel wide">
