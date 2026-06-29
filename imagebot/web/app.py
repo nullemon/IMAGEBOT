@@ -93,10 +93,20 @@ def _opts_from(data: dict) -> GenerateOptions:
     )
 
 
+def _asset_version() -> str:
+    """Newest mtime of the static files — busts the browser cache after a pull."""
+    base = Path(__file__).resolve().parent / "static"
+    try:
+        return str(int(max(p.stat().st_mtime for p in base.glob("*.*"))))
+    except Exception:
+        return "1"
+
+
 def create_app(settings=None) -> Flask:
     settings = settings or get_settings()
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0       # always revalidate static files
 
     def file_url(path: str) -> str:
         p = Path(path).resolve()
@@ -172,6 +182,7 @@ def create_app(settings=None) -> Flask:
             search_keyed=bool(settings.serpapi_key or (settings.google_api_key and settings.google_cse_id)),
             sd=bool(settings.sd_url),
             caps=_caps(),
+            asset_v=_asset_version(),
         )
 
     # ---- generate (parse + art once + render default template) ----------

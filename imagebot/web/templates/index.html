@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>IMAGEBOT — anime news card maker</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_v) }}" />
 </head>
 <body>
   <header class="topbar">
@@ -309,6 +309,6 @@ Solo Leveling Season 3 — July 4"></textarea>
   </template>
 
   <footer class="foot">Runs locally · output in <code>output/&lt;run&gt;/&lt;template&gt;/</code> · <span id="provider-note"></span></footer>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js', v=asset_v) }}"></script>
 </body>
 </html>
