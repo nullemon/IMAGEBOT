@@ -661,6 +661,41 @@ def prepare_auto(settings, opts: GenerateOptions, text: str, progress=None) -> d
     return out
 
 
+def export_all(mode: str, settings, opts: GenerateOptions | None, runid: str,
+               panels=None, post=None, ranking=None, progress=None) -> dict:
+    """Render EVERY template of the given mode for the current content and zip
+    the lot — one folder per template, one file per account. The full gallery,
+    ready to browse or post."""
+    opts = opts or GenerateOptions()
+    if mode == "news":
+        keys = [(k, n) for k, n, _ in NEWS_TEMPLATES]
+    elif mode == "ranking":
+        keys = list(RANK_TEMPLATES)
+    else:
+        mode = "lineup"
+        keys = [(s.key, s.name) for s in all_styles()]
+    files: list[tuple[str, str, str]] = []
+    for i, (key, name) in enumerate(keys, 1):
+        if mode == "news":
+            outputs = render_news_one(post, settings, opts, key, runid)
+        elif mode == "ranking":
+            outputs = render_ranking_one(ranking, settings, opts, key, runid)
+        else:
+            outputs = render_one(panels, settings, opts, key, runid)
+        for o in outputs:
+            for c in o["cards"]:
+                files.append((key, o["account"], c))
+        if progress:
+            progress(f"[{i}/{len(keys)}] {name}")
+    out_root = Path(settings.output_dir) / runid
+    out_root.mkdir(parents=True, exist_ok=True)
+    zip_path = out_root / f"{mode}_all_templates.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for key, account, path in files:
+            zf.write(path, arcname=f"{key}/{_slug(account or 'card')}_{Path(path).name}")
+    return {"zip": str(zip_path), "count": len(files), "templates": len(keys)}
+
+
 def make_auto(text: str, settings, opts: GenerateOptions | None = None, progress=None) -> dict:
     """One-shot auto pipeline (CLI): classify → render the picked template."""
     opts = opts or GenerateOptions()

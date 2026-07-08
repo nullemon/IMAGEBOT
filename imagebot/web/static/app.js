@@ -403,9 +403,26 @@ function renumberRanks() {
     const rk = r.querySelector('[data-e="rank"]'); if (rk) rk.value = i + 1;
   });
 }
+function enableRankDrag(row) {
+  const handle = row.querySelector(".rrow-rank");
+  handle.title = "drag to reorder";
+  handle.addEventListener("pointerdown", () => { row.draggable = true; });
+  row.addEventListener("dragstart", (e) => {
+    row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", ""); } catch (_) {}
+  });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+    row.draggable = false;
+    renumberRanks(); rerenderCurrent();
+  });
+}
+
 function buildRankRow(entry) {
   const row = $("#rank-row").content.cloneNode(true).querySelector(".rrow");
   RANK_FIELDS.forEach((f) => { const el = row.querySelector(`[data-e="${f}"]`); if (el && entry[f] != null) el.value = entry[f]; });
+  enableRankDrag(row);
   const pe = attachEditor(row, "rank", entry.art_url || "", 0.5, 0.32);
   row._pe = pe;
   row.querySelector(".art-file").addEventListener("change", (e) => {
@@ -473,6 +490,20 @@ async function downloadZip() {
     const d = await postJSON("/carousel", { panels: collectPanels(), runid: STATE.runid, style: STATE.current, cover: $("#cover").checked, ...options() });
     setBusy(false, "Carousel ready.");
     const a = document.createElement("a"); a.href = bust(d.zip); a.download = `${STATE.current}_carousel.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { setBusy(false, "Error: " + e.message); }
+}
+async function downloadAll() {
+  if (!STATE.current) return;
+  const payload = { runid: STATE.runid, ...options(), mode: STATE.mode };
+  if (STATE.mode === "news") payload.post = collectPost();
+  else if (STATE.mode === "ranking") payload.ranking = collectRanking();
+  else payload.panels = collectPanels();
+  setBusy(true, "Rendering EVERY template — the full pack…");
+  try {
+    const d = await postJSON("/export_all", payload);
+    setBusy(false, `🎁 Pack ready — ${d.count} images across ${d.templates} templates.`);
+    const a = document.createElement("a"); a.href = bust(d.zip); a.download = `${STATE.mode}_all_templates.zip`;
     document.body.appendChild(a); a.click(); a.remove();
   } catch (e) { setBusy(false, "Error: " + e.message); }
 }
@@ -556,8 +587,21 @@ $("#generate").addEventListener("click", generate);
 $("#rerender").addEventListener("click", applyEdits);
 $("#add-panel").addEventListener("click", () => addPanel());
 $("#dl-zip").addEventListener("click", downloadZip);
+$("#dl-all")?.addEventListener("click", downloadAll);
 
 $("#add-entry")?.addEventListener("click", () => { addRankRow({}); refreshAllAspects(); });
+$("#rank-entries")?.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const rc = $("#rank-entries");
+  const dragging = rc.querySelector(".rrow.dragging");
+  if (!dragging) return;
+  const after = [...rc.querySelectorAll(".rrow:not(.dragging)")].find((r) => {
+    const b = r.getBoundingClientRect();
+    return e.clientY < b.top + b.height / 2;
+  });
+  if (after) { if (after.previousElementSibling !== dragging) rc.insertBefore(dragging, after); }
+  else if (rc.lastElementChild !== dragging) rc.appendChild(dragging);
+});
 $("#rank-logo")?.addEventListener("change", (e) => {
   const file = e.target.files[0]; if (!file) return;
   updateRankLogo(URL.createObjectURL(file));

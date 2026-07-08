@@ -21,7 +21,8 @@ from ..models import Panel, NewsPost, RankingList
 from ..pipeline import (GenerateOptions, build_carousel, render_one,
                         prepare_lineup, prepare_news, render_news_one,
                         render_news_from_post, prepare_ranking, render_ranking_one,
-                        render_ranking_from_list, prepare_auto, DEFAULT_RANK, SIZES)
+                        render_ranking_from_list, prepare_auto, export_all,
+                        DEFAULT_RANK, SIZES)
 from ..styles import all_styles
 from ..newscard import news_templates, NEWS_TEMPLATES, DEFAULT_NEWS
 from ..rankcard import rank_templates, RANK_TEMPLATES
@@ -29,6 +30,15 @@ from .. import logos
 
 ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_STYLE = all_styles()[0].key
+
+
+def _resolve_mode(data: dict) -> str:
+    """The concrete mode for a request. 'auto' (stale client / race) is resolved
+    from whichever content the payload actually carries."""
+    mode = data.get("mode") or "lineup"
+    if mode == "auto":
+        mode = "ranking" if data.get("ranking") else ("news" if data.get("post") else "lineup")
+    return mode
 NEWS_NAME = {k: n for k, n, _ in NEWS_TEMPLATES}
 RANK_NAME = {k: n for k, n in RANK_TEMPLATES}
 _STYLE_NAME = {s.key: s.name for s in all_styles()}
@@ -244,7 +254,8 @@ def create_app(settings=None) -> Flask:
         opts = _opts_from(data)
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
         log: list[str] = []
-        if data.get("mode") == "ranking":
+        rmode = _resolve_mode(data)
+        if rmode == "ranking":
             rl = RankingList.from_dict(data.get("ranking", {}))
             if not rl.entries:
                 return jsonify(ok=False, error="No list entries."), 400
@@ -252,7 +263,7 @@ def create_app(settings=None) -> Flask:
             res = render_ranking_from_list(rl, settings, opts, runid, current)
             return jsonify(ranking_payload(runid, res.ranking, current, res.current["outputs"],
                                            res.provider_used, "", res.warnings, log))
-        if data.get("mode") == "news":
+        if rmode == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:
                 return jsonify(ok=False, error="No headline."), 400
@@ -274,7 +285,8 @@ def create_app(settings=None) -> Flask:
         data = request.get_json(silent=True) or {}
         runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
         opts = _opts_from(data)
-        if data.get("mode") == "ranking":
+        rmode = _resolve_mode(data)
+        if rmode == "ranking":
             rl = RankingList.from_dict(data.get("ranking", {}))
             if not rl.entries:
                 return jsonify(ok=False, error="Nothing to render."), 400
@@ -282,7 +294,7 @@ def create_app(settings=None) -> Flask:
             outputs = render_ranking_one(rl, settings, opts, style, runid)
             return jsonify(ok=True, mode="ranking", key=style, name=RANK_NAME.get(style, style),
                            runid=runid, outputs=outputs_urls(outputs))
-        if data.get("mode") == "news":
+        if rmode == "news":
             post = NewsPost.from_dict(data.get("post", {}))
             if not post.headline:
                 return jsonify(ok=False, error="Nothing to render."), 400
@@ -310,6 +322,33 @@ def create_app(settings=None) -> Flask:
         out = build_carousel(panels, settings, _opts_from(data), style_key, runid,
                              with_cover=_bool(data.get("cover"), True))
         return jsonify(ok=True, cards=[file_url(c) for c in out["cards"]], zip=file_url(out["zip"]))
+
+    # ---- export the FULL gallery (every template, current content) -------
+    @app.post("/export_all")
+    def export_all_route():
+        data = request.get_json(silent=True) or {}
+        opts = _opts_from(data)
+        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        mode = _resolve_mode(data)
+        kw = {}
+        if mode == "news":
+            post = NewsPost.from_dict(data.get("post", {}))
+            if not post.headline:
+                return jsonify(ok=False, error="Nothing to export."), 400
+            kw["post"] = post
+        elif mode == "ranking":
+            rl = RankingList.from_dict(data.get("ranking", {}))
+            if not rl.entries:
+                return jsonify(ok=False, error="Nothing to export."), 400
+            kw["ranking"] = rl
+        else:
+            panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
+            if not panels:
+                return jsonify(ok=False, error="Nothing to export."), 400
+            kw["panels"] = panels
+        out = export_all(mode, settings, opts, runid, **kw)
+        return jsonify(ok=True, zip=file_url(out["zip"]), count=out["count"],
+                       templates=out["templates"])
 
     # ---- uploads / logos ------------------------------------------------
     @app.post("/upload")
