@@ -11,6 +11,7 @@ panels (cutout, duotone, neon, noir, cinematic, …) so the user can pick.
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageOps, ImageFilter
@@ -731,9 +732,13 @@ def _layout_verbforward(ctx):
     Carries its own left→right scrim so the words stay legible over any art."""
     w, h, u, ml = ctx.w, ctx.h, ctx.u, ctx.ml
     panel, draw = ctx.panel, ctx.draw
-    # guaranteed legibility scrim (independent of the style's own scrims)
-    sw = int(w * 0.74)
-    ctx.base.alpha_composite(_alpha_scrim(sw, h, (0, 0, 0), 210, 0))
+    # guaranteed legibility scrim — scaled down by whatever the style already
+    # applied, so stacked scrims can't crush left-heavy art to black
+    applied = int(getattr(ctx.style, "scrim_left", 0) or 0)
+    if applied < 160:
+        sw = int(w * 0.74)
+        ctx.base.alpha_composite(_alpha_scrim(sw, h, (0, 0, 0),
+                                              max(80, 210 - applied), 0))
 
     y = ctx.cy0 + int(u * 0.05)
     # series pill (the small coloured tag on top)
@@ -766,8 +771,15 @@ def _layout_verbforward(ctx):
         draw_text(draw, (ml, y), sub, sf, (240, 240, 245))
         y += (sb - st) + int(u * 0.045)
 
-    # confidence badge row (first = solid accent, rest = solid dark)
-    badges = [str(x).strip().upper() for x in (panel.badges or []) if str(x).strip()]
+    # confidence badge row (first = solid accent, rest = solid dark); a date the
+    # subtitle doesn't already show gets appended as a final dark chip
+    raw = panel.badges
+    if isinstance(raw, str):             # robust to a comma string from any caller
+        raw = [x for x in re.split(r"[,/|]+", raw)]
+    badges = [str(x).strip().upper() for x in (raw or []) if str(x).strip()]
+    d_txt = (panel.date_text or "").strip().upper()
+    if d_txt and d_txt.lower() not in sub.lower():
+        badges = badges[:2] + [d_txt]
     if badges:
         bf = ctx.fonts.font("ui", max(12, int(u * 0.052)))
         padx, pady = int(w * 0.016), int(u * 0.024)
@@ -777,7 +789,7 @@ def _layout_verbforward(ctx):
             fg = readable_text_color(bg) if i == 0 else WHITE
             l0, t0, r0, b0 = draw.textbbox((0, 0), bdg, font=bf)
             bw, bh = (r0 - l0) + 2 * padx, (b0 - t0) + 2 * pady
-            draw.rectangle([bx, y, bx + bw, y + bh], fill=bg + (255,) if len(bg) == 3 else bg)
+            draw.rectangle([bx, y, bx + bw, y + bh], fill=bg + (255,))
             draw_text(draw, (bx + padx - l0, y + pady - t0), bdg, bf, fg, shadow=False)
             bx += bw + int(w * 0.012)
 
@@ -812,21 +824,28 @@ def render_card(panels: list[Panel], spec: CardSpec, fonts: FontBook | None = No
         card.alpha_composite(render_panel(panel, W, ph, fonts, spec), (0, y))
         if spec.divider and i < n - 1:
             ImageDraw.Draw(card).line([(0, y + ph - 1), (W, y + ph - 1)],
-                                      fill=style.divider, width=2)
+                                              fill=style.divider, width=2)
         y += ph
 
     if spec.brand.watermark:
-        d = ImageDraw.Draw(card)
+        # drawn on a transparent overlay and alpha-composited, so the 27%-alpha
+        # mark is a true ghost (ImageDraw alone REPLACES pixels — it would come
+        # out solid white); right-aligned to clear verb-forward's pills/badges.
+        ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
         wm = spec.brand.watermark.upper()
         f = fonts.font("ui", int(W * 0.034))
-        l, t, r, b = d.textbbox((0, 0), wm, font=f)
+        l, t, r, b = od.textbbox((0, 0), wm, font=f)
         if n > 1:
             seams = [H * i // n for i in range(1, n)]
             wy = min(seams, key=lambda s: abs(s - H / 2))
+            wx = W - int(W * 0.045) - (r - l)
         else:
             wy = int(H * 0.9)
-        d.text(((W - (r - l)) // 2 - l, wy - (b - t) // 2 - t), wm, font=f,
-               fill=(255, 255, 255, 70))
+            wx = (W - (r - l)) // 2
+        od.text((wx - l, wy - (b - t) // 2 - t), wm, font=f,
+                fill=(255, 255, 255, 70))
+        card.alpha_composite(ov)
     return card
 
 
@@ -862,20 +881,27 @@ def render_cover(panels: list[Panel], spec: CardSpec, fonts: FontBook | None = N
     d.rounded_rectangle([W // 2 - int(W * 0.08), ry, W // 2 + int(W * 0.08), ry + 8],
                         radius=4, fill=accent)
 
-    # series list
-    lf = fonts.font("ui", int(W * 0.04))
+    # series list — sized to the band between the rule and the watermark, so it
+    # never runs off the bottom on landscape covers
+    names = [p.title.upper() for p in panels[:8]]
+    lf = fonts.font("ui", int(min(W, H) * 0.045))
+    _, ht, _, hb = d.textbbox((0, 0), "Ay", font=lf)
+    band = int(H * 0.4)
+    step = min(int((hb - ht) * 1.45), band // max(1, len(names)))
     y = int(H * 0.5)
-    for p in panels[:8]:
-        line = p.title.upper()
+    for line in names:
         l, t, r, b = d.textbbox((0, 0), line, font=lf)
         draw_text(d, ((W - (r - l)) // 2, y), line, lf, (235, 235, 240))
-        y += int((b - t) + H * 0.022)
+        y += step
 
     if spec.brand.watermark:
         wf = fonts.font("ui", int(W * 0.03))
-        l, t, r, b = d.textbbox((0, 0), spec.brand.watermark.upper(), font=wf)
-        draw_text(d, ((W - (r - l)) // 2, int(H * 0.93)), spec.brand.watermark.upper(),
-                  wf, (255, 255, 255, 150), shadow=False)
+        ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        l, t, r, b = od.textbbox((0, 0), spec.brand.watermark.upper(), font=wf)
+        od.text((((W - (r - l)) // 2) - l, int(H * 0.93) - t), spec.brand.watermark.upper(),
+                font=wf, fill=(255, 255, 255, 150))
+        base.alpha_composite(ov)
     return base
 
 

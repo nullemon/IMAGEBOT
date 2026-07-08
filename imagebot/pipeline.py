@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import time
+import uuid
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,11 @@ _RANK_NAME = {k: n for k, n in RANK_TEMPLATES}
 RANK_MAX = 20                     # most entries we'll keep from a pasted list
 
 _FONTS = FontBook()
+
+
+def _new_runid() -> str:
+    """Second-resolution timestamps collide on double-clicks — add entropy."""
+    return time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
 
 # named output sizes for the UI / CLI
 SIZES = {
@@ -248,7 +254,7 @@ def make_variants(settings, opts: GenerateOptions | None = None, news: str | Non
                 p.date_text = opts.date_text
 
     warnings = resolve_art(panels, settings, opts, provider=prov, progress=progress)
-    runid = time.strftime("%Y%m%d-%H%M%S")
+    runid = _new_runid()
     if progress:
         progress(f"rendering {len(opts.styles or all_styles())} style variants…")
     variants = render_variants(panels, settings, opts, runid, progress=progress)
@@ -448,7 +454,7 @@ def make_news_post(news: str, settings, opts: GenerateOptions | None = None,
     post = prep["post"]
     if not post.headline:
         return NewsResult(post=post, warnings=prep["warnings"], provider_used=prep["provider_used"])
-    runid = time.strftime("%Y%m%d-%H%M%S")
+    runid = _new_runid()
     key = template_key or DEFAULT_NEWS
     if progress:
         progress("rendering the post…")
@@ -555,6 +561,17 @@ def ranking_caption(rl: RankingList, settings, opts, provider=None) -> str:
     return f"🏆 {rl.title}!\n\n{lines}\n\nDo you agree? 👇\n\n{tags}"
 
 
+def _rank_size_warning(rl: RankingList, settings, opts: GenerateOptions):
+    from .rankcard import rank_capacity
+    w = opts.width or settings.card_width
+    h = opts.height or settings.card_height
+    cap = rank_capacity(w, h, len(rl.entries))
+    if len(rl.entries) > cap:
+        return (f"This size fits {cap} of your {len(rl.entries)} entries — "
+                "use portrait or story for the full list.")
+    return None
+
+
 def render_ranking_one(rl: RankingList, settings, opts: GenerateOptions | None,
                        template_key: str, runid: str) -> list[dict]:
     """Render ONE ranking template for a resolved list — one output per account,
@@ -582,6 +599,9 @@ def prepare_ranking(settings, opts: GenerateOptions, news: str, progress=None) -
         return {"ranking": rl, "warnings": ["Couldn't read any list entries."],
                 "provider_used": pu, "caption": ""}
     warnings = _resolve_ranking_art(rl, settings, opts, prov, progress)
+    sw = _rank_size_warning(rl, settings, opts)
+    if sw:
+        warnings.append(sw)
     caption = ranking_caption(rl, settings, opts, provider=prov) if opts.write_caption else ""
     return {"ranking": rl, "warnings": warnings, "provider_used": pu, "caption": caption}
 
@@ -594,7 +614,7 @@ def make_ranking(news: str, settings, opts: GenerateOptions | None = None,
     if not rl.entries:
         return RankingResult(ranking=rl, warnings=prep["warnings"],
                              provider_used=prep["provider_used"])
-    runid = time.strftime("%Y%m%d-%H%M%S")
+    runid = _new_runid()
     key = template_key or DEFAULT_RANK
     if progress:
         progress("rendering the ranking…")
@@ -615,6 +635,9 @@ def render_ranking_from_list(rl: RankingList, settings, opts: GenerateOptions, r
     """Re-render a (possibly edited) list into a template — re-resolves art."""
     prov = get_text_provider(settings, opts.provider)
     warnings = _resolve_ranking_art(rl, settings, opts, prov, None)
+    sw = _rank_size_warning(rl, settings, opts)
+    if sw:
+        warnings.append(sw)
     outputs = render_ranking_one(rl, settings, opts, template_key, runid)
     return RankingResult(ranking=rl, runid=runid, warnings=warnings,
                          provider_used=getattr(prov, "name", "none"),
@@ -700,7 +723,7 @@ def make_auto(text: str, settings, opts: GenerateOptions | None = None, progress
     """One-shot auto pipeline (CLI): classify → render the picked template."""
     opts = opts or GenerateOptions()
     ap = prepare_auto(settings, opts, text, progress=progress)
-    runid = time.strftime("%Y%m%d-%H%M%S")
+    runid = _new_runid()
     mode, key = ap["mode"], ap["template"]
     if mode == "ranking":
         ap["outputs"] = render_ranking_one(ap["ranking"], settings, opts, key, runid)

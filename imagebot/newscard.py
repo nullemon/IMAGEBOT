@@ -32,6 +32,16 @@ class NewsCtx:
 def wrap_lines(draw, text, font, max_w):
     out, cur = [], ""
     for word in (text or "").split():
+        # hard-break a single word wider than the box (romaji titles, hashtags…)
+        while len(word) > 2 and draw.textlength(word, font=font) > max_w:
+            k = len(word) - 1
+            while k > 1 and draw.textlength(word[:k], font=font) > max_w:
+                k -= 1
+            if cur:
+                out.append(cur)
+                cur = ""
+            out.append(word[:max(1, k)])
+            word = word[max(1, k):]
         t = (cur + " " + word).strip()
         if not cur or draw.textlength(t, font=font) <= max_w:
             cur = t
@@ -50,7 +60,8 @@ def fit_wrapped(ctx, text, role, max_w, max_h, max_lines, start, minimum=24, gap
         lines = wrap_lines(ctx.draw, text, f, max_w)
         l, t, r, b = f.getbbox("Ay")
         lh = int((b - t) * gap)
-        if len(lines) <= max_lines and lh * len(lines) <= max_h:
+        if (len(lines) <= max_lines and lh * len(lines) <= max_h
+                and all(ctx.draw.textlength(ln, font=f) <= max_w for ln in lines)):
             return f, lines, lh
         size -= 3
     f = ctx.fonts.font(role, minimum)
@@ -390,11 +401,12 @@ def _t_framed(ctx, _bg_solid=(14, 14, 18)):
 def _t_list(ctx):
     W, H, ml = ctx.W, ctx.H, ctx.ml
     _darken(ctx, 150)
-    _category(ctx, ml, ml, "left")
+    _, cat_h = _category(ctx, ml, ml, "left")
     _wordmark_corner(ctx)
     hf, hlines, hlh = fit_wrapped(ctx, ctx.post.headline, _headline_role(heavy=True),
                                   W - 2 * ml, int(H * 0.2), 2, int(W * 0.1))
-    y = draw_wrapped(ctx, lines=hlines, x=ml, y=int(H * 0.13), font=hf, lh=hlh, fill=WHITE)
+    hy = max(int(H * 0.13), ml + cat_h + int(H * 0.02))   # clear the pill on landscape
+    y = draw_wrapped(ctx, lines=hlines, x=ml, y=hy, font=hf, lh=hlh, fill=WHITE)
     items = ctx.post.items or [x for x in (ctx.post.body or "").split("\n") if x.strip()]
     y += int(H * 0.03)
     nf = ctx.fonts.font("date", int(W * 0.05))

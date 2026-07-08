@@ -12,10 +12,18 @@ from .providers import get_text_provider
 
 _MONTHS = ("january february march april may june july august september "
            "october november december").split()
-_MONTH_RE = re.compile(
-    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b",
-    re.IGNORECASE,
-)
+# Fully-specified month tokens: "Marin 4" / "Junko 15" can no longer read as
+# dates ("mar"+[a-z]* used to eat the rest of the word).
+_MONTHS_RX = (r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+              r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
+              r"nov(?:ember)?|dec(?:ember)?")
+_MONTH_DAY_RE = re.compile(
+    r"\b(" + _MONTHS_RX + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b"
+    r"(?!\s*(?:day|days|week|weeks|month|months|year|years|more|be\b))",
+    re.IGNORECASE)
+_MONTH_YEAR_RE = re.compile(r"\b(" + _MONTHS_RX + r")\.?,?\s+(20\d{2})\b", re.IGNORECASE)
+_YEAR_RE = re.compile(r"\b(20\d{2})\b")
+_MONTH_RE = _MONTH_DAY_RE                     # back-compat alias
 _SEASON_RE = re.compile(r"\bseason\s*(\d+)\b", re.IGNORECASE)
 _PART_RE = re.compile(r"\bpart\s*(\d+)\b", re.IGNORECASE)
 _MONTH_ABBR = {m[:3]: m for m in _MONTHS}
@@ -98,8 +106,9 @@ def parse_news(text: str, settings, provider=None, max_panels: int = 8,
                         p.tag_sub = default_tag_sub
                     conf = (item.get("confidence") or "").lower()
                     if not p.badges and any(k in conf for k in ("leak", "rumor", "rumour", "unconfirmed")):
-                        p.badges = ["RUMOR" if ("rumor" in conf or "rumour" in conf) else "LEAK",
-                                    "UNCONFIRMED"]
+                        first = ("LEAK" if "leak" in conf
+                                 else "RUMOR" if ("rumor" in conf or "rumour" in conf) else "")
+                        p.badges = ([first] if first else []) + ["UNCONFIRMED"]
                     panels.append(p)
             if panels:
                 return panels
@@ -110,12 +119,24 @@ def parse_news(text: str, settings, provider=None, max_panels: int = 8,
 
 
 # --------------------------------------------------------------------------
+def _has_month_date(s: str) -> bool:
+    """A real month-based date (used as a routing signal — years alone don't count)."""
+    return bool(_MONTH_DAY_RE.search(s) or _MONTH_YEAR_RE.search(s))
+
+
 def _extract_date(s: str) -> str:
-    m = _MONTH_RE.search(s)
-    if not m:
-        return ""
-    month = _MONTH_ABBR.get(m.group(1).lower()[:3], m.group(1))
-    return f"{month} {int(m.group(2))}".upper()
+    m = _MONTH_DAY_RE.search(s)
+    if m:
+        month = _MONTH_ABBR.get(m.group(1).lower()[:3], m.group(1))
+        return f"{month} {int(m.group(2))}".upper()
+    m = _MONTH_YEAR_RE.search(s)
+    if m:
+        month = _MONTH_ABBR.get(m.group(1).lower()[:3], m.group(1))
+        return f"{month} {m.group(2)}".upper()
+    m = _YEAR_RE.search(s)
+    if m:
+        return m.group(1)
+    return ""
 
 
 def _extract_tag(s: str) -> str:
@@ -150,7 +171,8 @@ def _clean_title(s: str) -> str:
     # drop season/part/date tokens, then trailing status/filler words
     s = _SEASON_RE.sub("", s)
     s = _PART_RE.sub("", s)
-    s = _MONTH_RE.sub("", s)
+    s = _MONTH_DAY_RE.sub("", s)
+    s = _MONTH_YEAR_RE.sub("", s)
     s = re.sub(r"\b\d{4}\b", "", s)            # stray years
     # strip noise phrases from the END repeatedly (keep them if mid-title)
     prev = None
@@ -360,7 +382,9 @@ def _split_name_source(s: str) -> tuple[str, str]:
     m = re.match(r"^(.+?)\s*[\(\[]([^)\]]+)[\)\]]\s*$", s)   # "Name (Show)"
     if m:
         return m.group(1).strip(), m.group(2).strip()
-    for sep in (" — ", " – ", " - ", " | ", " · ", " / ", " from ", " — ", ": "):
+    # NOTE: no ": " or " from " here — subtitled titles like "Frieren: Beyond
+    # Journey's End" / "The Witch from Mercury" are one name, not name+source.
+    for sep in (" — ", " – ", " - ", " | ", " · ", " / "):
         if sep in s:
             a, b = s.split(sep, 1)
             return a.strip(), b.strip()

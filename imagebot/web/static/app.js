@@ -2,10 +2,10 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FIELDS = ["title", "subtitle", "verb", "badges", "tag_main", "tag_sub", "date_text",
-  "logo_style", "theme", "query", "image_url", "image_path", "logo_path",
+  "logo_style", "theme", "accent", "query", "image_url", "image_path", "logo_path",
   "focus_x", "focus_y", "zoom"];
 const NEWS_FIELDS = ["headline", "body", "category", "source", "date_text",
-  "theme", "query", "image_url", "image_path", "focus_x", "focus_y", "zoom"];
+  "theme", "accent", "query", "image_url", "image_path", "focus_x", "focus_y", "zoom"];
 const RANK_FIELDS = ["rank", "name", "source", "query", "image_url", "image_path",
   "focus_x", "focus_y", "zoom"];
 
@@ -91,6 +91,8 @@ class PhotoEditor {
   }
   setAspect(a) { if (a > 0 && Math.abs(a - this.aspect) > 0.005) { this.aspect = a; this.resize(); } }
   resize() {
+    // skip hidden editors (clientWidth 0) — they get a real resize on reveal
+    if (!this.cv.clientWidth && !((this.cv.parentElement || {}).clientWidth)) return;
     const cw = Math.max(120, Math.round(this.cv.clientWidth || (this.cv.parentElement || {}).clientWidth || 320));
     const ch = Math.max(60, Math.round(cw / this.aspect));
     if (this.cv.width !== cw || this.cv.height !== ch) { this.cv.width = cw; this.cv.height = ch; }
@@ -100,8 +102,9 @@ class PhotoEditor {
   setSrc(src) {
     if (!src) { this.img = null; this.draw(); return; }
     const im = new Image();
-    im.onload = () => { this.img = im; this.draw(); };
-    im.onerror = () => { this.img = null; this.draw(); };
+    const revoke = () => { if (src.startsWith("blob:")) try { URL.revokeObjectURL(src); } catch (_) {} };
+    im.onload = () => { this.img = im; this.draw(); revoke(); };
+    im.onerror = () => { this.img = null; this.draw(); revoke(); };
     im.src = src;
   }
   geom() {
@@ -140,8 +143,9 @@ class PhotoEditor {
       const dx = e.clientX - this.lx, dy = e.clientY - this.ly;
       this.lx = e.clientX; this.ly = e.clientY;
       let fx = this.fx(), fy = this.fy();
-      if (g.nw > g.cw) fx = clamp01((g.left - dx) / (g.nw - g.cw));
-      if (g.nh > g.ch) fy = clamp01((g.top - dy) / (g.nh - g.ch));
+      // >1px slack required: float epsilon at zoom=1 must not snap focus to 0/1
+      if (g.nw - g.cw > 1) fx = clamp01((g.left - dx) / (g.nw - g.cw));
+      if (g.nh - g.ch > 1) fy = clamp01((g.top - dy) / (g.nh - g.ch));
       this.set(fx, fy, this.zoom()); this.draw();
     });
     const end = () => { if (this.dragging) { this.dragging = false; cv.classList.remove("grabbing"); this.commit(); } };
@@ -164,7 +168,16 @@ function rankCount() { const n = $$("#rank-entries .rrow").length; return n || 1
 function rankAspect(n) {
   const [W, H] = curWH();
   const hh = Math.min(Math.max(H * 0.11, 128), H * 0.17);
-  const rowH = (H - hh) / Math.max(1, n || rankCount());
+  // mirror rankcard.rank_capacity so the editor's crop aspect matches the render
+  const nReq = Math.max(1, n || rankCount());
+  const pref = Math.max(46, H * 0.045, W * 0.065);
+  const capPref = Math.max(1, Math.floor((H - hh) / pref));
+  let rows = nReq;
+  if (nReq > capPref) {
+    const hard = Math.max(1, Math.floor((H - hh) / Math.max(40, H * 0.038)));
+    rows = hard > capPref ? Math.min(nReq, hard) : capPref;
+  }
+  const rowH = (H - hh) / rows;
   return (W * 0.255) / rowH;
 }
 function lineupAspect() {
@@ -275,6 +288,7 @@ async function switchTemplate(key) {
   } catch (e) { setBusy(false, "Error: " + e.message); }
   pc.style.opacity = "1";
 }
+const CAN_COPY_IMG = "ClipboardItem" in window && !!(navigator.clipboard && navigator.clipboard.write);
 function showCurrent(d) {
   STATE.current = d.key; if (d.runid) STATE.runid = d.runid;
   $("#preview-wrap").classList.remove("hidden");
@@ -284,7 +298,18 @@ function showCurrent(d) {
     const div = document.createElement("div"); div.className = "sel-card";
     const label = o.account ? `<div class="acc-label">${o.account}</div>` : "";
     const name = (o.account || d.key).replace(/[^a-z0-9]/gi, "_");
-    div.innerHTML = `${label}<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${name}_${i + 1}.png">⬇ download</a>`;
+    const copyBtn = CAN_COPY_IMG ? `<button class="ghost small copy-img" type="button">📋 copy</button>` : "";
+    div.innerHTML = `${label}<img src="${bust(src)}"><a class="dl" href="${bust(src)}" download="${name}_${i + 1}.png">⬇ download</a>${copyBtn}`;
+    const cb = div.querySelector(".copy-img");
+    if (cb) cb.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          "image/png": fetch(bust(src)).then((r) => r.blob()),
+        })]);
+        cb.textContent = "✓ copied";
+      } catch (e) { cb.textContent = "copy failed"; }
+      setTimeout(() => (cb.textContent = "📋 copy"), 1500);
+    });
     pc.appendChild(div);
   }));
   markActive();
@@ -303,9 +328,10 @@ function showResult(data) {
     an.textContent = "✨ Auto-picked: " + data.auto + " — tweak below, or switch templates / mode to override.";
     an.classList.remove("hidden");
   } else { an.classList.add("hidden"); }
-  $("#run-note").textContent = `run ${data.runid} · ${data.styles.length} templates · ${data.provider_used}`;
+  $("#run-note").textContent = `run ${data.runid} · ${data.styles.length} templates · ←/→ to switch · ${data.provider_used}`;
   $("#provider-note").textContent = "provider: " + data.provider_used;
   $("#dl-zip").classList.toggle("hidden", STATE.mode !== "lineup");
+  const cw = $("#cover-wrap"); if (cw) cw.classList.toggle("hidden", STATE.mode !== "lineup");
   buildChips();
 
   const w = $("#warnings"); w.innerHTML = "";
@@ -328,7 +354,7 @@ function showResult(data) {
 
 // ---- news editor ----------------------------------------------------------
 function populateNews(post) {
-  NEWS_FIELDS.forEach((f) => { const el = $(`[data-n="${f}"]`); if (el) el.value = post[f] || ""; });
+  NEWS_FIELDS.forEach((f) => { const el = $(`[data-n="${f}"]`); if (el) el.value = post[f] != null ? post[f] : ""; });
   $("#news-art-state").textContent = post.image_path ? "✓ art set" : "";
   if (!NEWS_PE) NEWS_PE = attachEditor($("#news-fields"), "news", "", 0.5, 0.4);
   NEWS_PE.setAspect(newsAspect());
@@ -442,28 +468,56 @@ function populateRanking(rl) {
   $('[data-r="title"]').value = rl.title || "";
   $('[data-r="subtitle"]').value = rl.subtitle || "";
   $('[data-r="logo_path"]').value = rl.logo_path || "";
+  const acc = $('[data-r="accent"]'); if (acc) acc.value = rl.accent || "";
   updateRankLogo(rl.logo_url || "");
   const box = $("#rank-entries"); box.innerHTML = "";
   (rl.entries || []).forEach(addRankRow);
   refreshAllAspects();
 }
 function collectRanking() {
-  const entries = $$("#rank-entries .rrow").map((row, i) => {
+  const entries = $$("#rank-entries .rrow").map((row) => {
     const e = {}; RANK_FIELDS.forEach((f) => { const el = row.querySelector(`[data-e="${f}"]`); if (el) e[f] = el.value; });
-    e.rank = i + 1;
     return e;
-  }).filter((e) => (e.name || "").trim());
+  }).filter((e) => (e.name || "").trim())        // filter FIRST, then number —
+    .map((e, i) => (e.rank = i + 1, e));         // blanked rows leave no gaps
   return {
     title: ($('[data-r="title"]') || {}).value || "TOP 10",
     subtitle: ($('[data-r="subtitle"]') || {}).value || "",
     logo_path: ($('[data-r="logo_path"]') || {}).value || "",
+    accent: ($('[data-r="accent"]') || {}).value || "",
     entries,
   };
 }
 function updateRankLogo(url) {
   const img = $("#rank-logo-prev"), fb = $("#rank-logo-fallback");
+  const prev = img.getAttribute("src") || "";
+  if (prev.startsWith("blob:") && prev !== url) { try { URL.revokeObjectURL(prev); } catch (_) {} }
   if (url) { img.src = url; img.classList.remove("hidden"); fb.classList.add("hidden"); }
   else { img.classList.add("hidden"); img.removeAttribute("src"); fb.classList.remove("hidden"); }
+}
+
+// ---- refresh-proof sessions: keep the last run, offer to restore it --------
+function saveLastRun(d) {
+  try { localStorage.setItem("imagebot:last", JSON.stringify(d)); } catch (_) {}
+}
+function offerRestore() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem("imagebot:last") || "null"); } catch (_) {}
+  if (!d || !d.runid || $("#restore-run")) return;
+  const wrap = document.createElement("div");
+  wrap.className = "restore-wrap";
+  wrap.innerHTML = `<button id="restore-run" class="ghost small" type="button">↩ Restore last run (${d.runid})</button>
+    <button id="restore-x" class="ghost small danger" type="button" title="forget it">✕</button>`;
+  $("#empty").appendChild(wrap);
+  $("#restore-run").addEventListener("click", () => {
+    const rb = document.querySelector(`input[name=mode][value="${d.mode}"]`);
+    if (rb) rb.checked = true;
+    showResult(d); wrap.remove();
+  });
+  $("#restore-x").addEventListener("click", () => {
+    try { localStorage.removeItem("imagebot:last"); } catch (_) {}
+    wrap.remove();
+  });
 }
 
 // ---- actions --------------------------------------------------------------
@@ -471,7 +525,7 @@ async function generate() {
   const news = $("#news").value.trim();
   if (!news) { setBusy(false, "Paste some news first."); return; }
   setBusy(true, "Parsing, finding art, building your card…");
-  try { const d = await postJSON("/generate", { news, style: STATE.current, ...options() }); showResult(d); setBusy(false, (d.log || []).join("\n")); }
+  try { const d = await postJSON("/generate", { news, style: STATE.current, ...options() }); showResult(d); saveLastRun(d); setBusy(false, (d.log || []).join("\n")); }
   catch (e) { setBusy(false, "Error: " + e.message); }
 }
 async function applyEdits() {
@@ -480,7 +534,7 @@ async function applyEdits() {
   if (STATE.mode === "news") payload.post = collectPost();
   else if (STATE.mode === "ranking") payload.ranking = collectRanking();
   else payload.panels = collectPanels();
-  try { const d = await postJSON("/render", payload); showResult(d); setBusy(false, (d.log || []).join("\n")); }
+  try { const d = await postJSON("/render", payload); showResult(d); saveLastRun(d); setBusy(false, (d.log || []).join("\n")); }
   catch (e) { setBusy(false, "Error: " + e.message); }
 }
 async function downloadZip() {
@@ -510,6 +564,7 @@ async function downloadAll() {
 
 function onModeChange() {
   const m = mode();
+  STATE.current = ""; STATE.runid = "";   // never carry a template key across modes
   $("#news").placeholder = m === "ranking"
     ? "Paste your list, e.g.\nTITLE: TOP 10 FEMALE CHARACTERS\nSUBTITLE: BASED ON SPRING 2026 WEEK 11\nITEMS:\n1. Frieren — Frieren: Beyond Journey's End\n2. Anya Forger — Spy x Family\n3. Power — Chainsaw Man"
     : m === "news"
@@ -521,6 +576,7 @@ function onModeChange() {
   ["#templates", "#preview-wrap", "#editor"].forEach((s) => $(s).classList.add("hidden"));
   $("#auto-note").classList.add("hidden");
   $("#empty").classList.remove("hidden");
+  offerRestore();                          // an accidental mode click is one undo away
 }
 
 // ---- wiring ---------------------------------------------------------------
@@ -623,7 +679,22 @@ $("#copy-caption").addEventListener("click", () => {
   navigator.clipboard.writeText($("#caption").value);
   $("#copy-caption").textContent = "Copied!"; setTimeout(() => ($("#copy-caption").textContent = "Copy"), 1500);
 });
-$("#news").addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); });
+// keyboard: Ctrl/Cmd+Enter generates from anywhere; ←/→ flips templates
+document.addEventListener("keydown", (e) => {
+  const modalOpen = !$("#settings-modal").classList.contains("hidden");
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !modalOpen) { e.preventDefault(); generate(); return; }
+  if (modalOpen || !STATE.current || $("#preview-wrap").classList.contains("hidden")) return;
+  const tag = (e.target && e.target.tagName) || "";
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    const keys = STATE.styles.map((s) => s.key);
+    const i = keys.indexOf(STATE.current);
+    if (i < 0 || !keys.length) return;
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    switchTemplate(keys[(i + dir + keys.length) % keys.length]);
+  }
+});
 
 let _rt;
 window.addEventListener("resize", () => {
@@ -635,3 +706,4 @@ window.addEventListener("resize", () => {
 });
 
 onModeChange();
+offerRestore();

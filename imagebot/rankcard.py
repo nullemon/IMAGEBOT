@@ -62,10 +62,10 @@ RANK_THEMES = {
                row_bg="#171a26", row_bg_alpha=255, row_alt="#1c2030",
                name_color="#ffffff", source_color="#99a1b8", divider=None),
     "minimal": _T(page=("solid", "#ffffff"), header_split=False, header_bg="#ffffff",
-                  title_color="#121212", subtitle_color="#8a8a8a", brand_color="#121212",
+                  title_color="#121212", subtitle_color="#6b6b6b", brand_color="#121212",
                   accent="#e0152b", rank_shape="plain", rank_top="accent",
                   rank_rest="#c2c4cc", rank_text="accent", row_bg=None,
-                  name_color="#121212", source_color="#8a8a8a", divider="#ececf0"),
+                  name_color="#121212", source_color="#6b6b6b", divider="#ececf0"),
     "gradient": _T(page=("gradient", "#180f2e", "#3a1c5c"), header_split=False,
                    header_bg=None, title_color="#ffffff", subtitle_color="#d9c6ff",
                    brand_color="#ffffff", accent="#b07cff", rank_shape="chip",
@@ -73,10 +73,10 @@ RANK_THEMES = {
                    row_bg="#000000", row_bg_alpha=70, name_color="#ffffff",
                    source_color="#cdbcec", divider=None),
     "magazine": _T(page=("solid", "#f4f1ea"), header_split=False, header_bg="#f4f1ea",
-                   title_color="#1a1a1a", subtitle_color="#9a7a3a", brand_color="#1a1a1a",
+                   title_color="#1a1a1a", subtitle_color="#7a5c22", brand_color="#1a1a1a",
                    accent="#b8862a", rank_shape="plain", rank_top="accent",
                    rank_rest="#b3a587", rank_text="accent", name_role="logo_serif",
-                   row_bg=None, name_color="#1a1a1a", source_color="#7a6a4a",
+                   row_bg=None, name_color="#1a1a1a", source_color="#6a5a3a",
                    divider="#dcd4c3", img_border="#1a1a1a"),
     "neon": _T(page=("solid", "#07070c"), header_split=False, header_bg="#07070c",
                title_color="#ffffff", subtitle_color="#37e6c2", brand_color="#37e6c2",
@@ -315,7 +315,10 @@ def _draw_row(base, draw, entry, rank, theme, accent, fonts, W, y0, row_h, idx):
 
     # ---- rank block ----
     rcol = _col(theme["rank_top"] if rank <= 3 else theme["rank_rest"], accent)
-    rtext = _col(theme["rank_text"], accent)
+    if theme["rank_text"] == "auto":         # per-block contrast, not accent
+        rtext = readable_text_color(rcol) if rcol is not None else WHITE
+    else:
+        rtext = _col(theme["rank_text"], accent)
     shape = theme["rank_shape"]
     rbox = (0, iy0, rank_w, iy1)
     if shape == "block" and rcol is not None:
@@ -382,6 +385,22 @@ def _draw_row(base, draw, entry, rank, theme, accent, fonts, W, y0, row_h, idx):
 # --------------------------------------------------------------------------
 # assembly
 # --------------------------------------------------------------------------
+def _header_h(width: int, height: int) -> int:
+    return int(min(max(height * 0.11, 128), height * 0.17))
+
+
+def rank_capacity(width: int, height: int, n_entries: int) -> int:
+    """How many rows actually render at this size: the comfortable cap, relaxed
+    toward a hard legibility floor when the list explicitly has more entries."""
+    hh = _header_h(width, height)
+    pref = max(46, int(height * 0.045), int(width * 0.065))   # aspect-aware floor
+    cap_pref = max(1, (height - hh) // pref)
+    if n_entries <= cap_pref:
+        return cap_pref
+    hard = max(1, (height - hh) // max(40, int(height * 0.038)))
+    return min(n_entries, hard) if hard > cap_pref else cap_pref
+
+
 def render_ranking(rl: RankingList, template_key: str, spec: CardSpec,
                    fonts: FontBook | None = None) -> Image.Image:
     fonts = fonts or FontBook()
@@ -390,11 +409,8 @@ def render_ranking(rl: RankingList, template_key: str, spec: CardSpec,
     accent = hex_to_rgb(rl.accent) if rl.accent else hex_to_rgb(theme["accent"])
     brand_text = (spec.brand.watermark or "ANIME LIST").strip()
 
-    header_h = int(min(max(H * 0.11, 128), H * 0.17))
-    # cap rows to what stays legible, then size rows to the actual count
-    min_row = max(46, int(H * 0.045))
-    max_rows = max(1, (H - header_h) // min_row)
-    entries = [e for e in rl.entries][:max_rows]
+    header_h = _header_h(W, H)
+    entries = list(rl.entries)[:rank_capacity(W, H, len(rl.entries))]
     n = max(1, len(entries))
 
     base = _background(W, H, theme, accent)

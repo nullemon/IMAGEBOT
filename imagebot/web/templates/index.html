@@ -33,10 +33,10 @@
         <code>.env</code> on this computer (stays after restart, never leaves your machine).
         Leave a box blank to keep what's already saved. You only need <b>one</b> AI key.</p>
       <div class="set-grid">
-        <label>Claude <small>(Anthropic)</small><input data-k="anthropic_key" type="password" autocomplete="off" spellcheck="false" /></label>
-        <label>ChatGPT <small>(OpenAI)</small><input data-k="openai_key" type="password" autocomplete="off" spellcheck="false" /></label>
-        <label>Gemini <small>(Google)</small><input data-k="gemini_key" type="password" autocomplete="off" spellcheck="false" /></label>
-        <label>Grok <small>(xAI)</small><input data-k="xai_key" type="password" autocomplete="off" spellcheck="false" /></label>
+        <label>Claude <small>(Anthropic)</small><input data-k="anthropic_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
+        <label>ChatGPT <small>(OpenAI)</small><input data-k="openai_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
+        <label>Gemini <small>(Google)</small><input data-k="gemini_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
+        <label>Grok <small>(xAI)</small><input data-k="xai_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
         <label>Default AI
           <select data-k="text_provider">
             <option value="auto">auto (first available)</option>
@@ -49,8 +49,8 @@
       <details class="prompt-help">
         <summary>Optional — better image search &amp; local art</summary>
         <div class="set-grid">
-          <label>SerpApi key<input data-k="serpapi_key" type="password" autocomplete="off" spellcheck="false" /></label>
-          <label>Google API key<input data-k="google_api_key" type="password" autocomplete="off" spellcheck="false" /></label>
+          <label>SerpApi key<input data-k="serpapi_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
+          <label>Google API key<input data-k="google_api_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
           <label>Google CSE id<input data-k="google_cse_id" type="text" autocomplete="off" spellcheck="false" /></label>
           <label>Local SD URL<input data-k="sd_url" type="text" placeholder="http://127.0.0.1:7860" /></label>
         </div>
@@ -146,7 +146,7 @@ Solo Leveling Season 3 — July 4"></textarea>
       <div class="row-between">
         <h3 id="cur-name">—</h3>
         <div class="sel-actions">
-          <label class="inline"><input type="checkbox" id="cover" checked /> cover slide</label>
+          <span id="cover-wrap"><label class="inline"><input type="checkbox" id="cover" checked /> cover slide</label></span>
           <button id="dl-zip" class="ghost small">⬇ carousel .zip</button>
           <button id="dl-all" class="ghost small" title="Render this content in EVERY template and download the pack">🎁 ALL templates .zip</button>
         </div>
@@ -186,6 +186,7 @@ Solo Leveling Season 3 — July 4"></textarea>
         <label class="grow">Search query<input data-n="query" /></label>
         <label class="grow">Image URL<input data-n="image_url" placeholder="direct link to override search" /></label>
         <input type="hidden" data-n="image_path" />
+        <input type="hidden" data-n="accent" />
         <label class="upload">Art<input type="file" accept="image/*" id="news-art" /></label>
         <span id="news-art-state" class="art-state"></span>
       </div>
@@ -219,6 +220,7 @@ Solo Leveling Season 3 — July 4"></textarea>
             <button type="button" id="rank-logo-clear" class="ghost small">use text</button>
           </div>
           <input type="hidden" data-r="logo_path" />
+          <input type="hidden" data-r="accent" />
           <small class="muted">No logo? The header shows your watermark initials.</small>
         </div>
       </div>
@@ -251,6 +253,7 @@ Solo Leveling Season 3 — July 4"></textarea>
         <label class="grow">Image URL<input data-f="image_url" type="text" placeholder="direct link to override search" /></label>
         <input type="hidden" data-f="image_path" />
         <input type="hidden" data-f="logo_path" />
+        <input type="hidden" data-f="accent" />
         <label class="upload">Art<input type="file" accept="image/*" class="art-file" /></label>
         <label class="upload">Logo<input type="file" accept="image/png,image/webp" class="logo-file" /></label>
         <button class="ghost find-logo" type="button">Find logo</button>

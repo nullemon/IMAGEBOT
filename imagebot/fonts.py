@@ -142,15 +142,16 @@ class FontBook:
         start: int = 200,
         minimum: int = 12,
     ) -> ImageFont.FreeTypeFont:
-        """Largest font (for `role`) where `text` fits within max_w x max_h."""
-        size = start
-        while size > minimum:
+        """Largest font (for `role`) where `text` fits within max_w x max_h.
+        Always measures at least once, so a start <= minimum still shrinks-to-fit
+        down to the floor instead of returning an unmeasured font."""
+        size = max(int(start), minimum)
+        while True:
             f = self.font(role, size)
             w, h = self.measure(draw, text, f)
-            if w <= max_w and h <= max_h:
+            if (w <= max_w and h <= max_h) or size <= minimum:
                 return f
             # shrink proportionally to converge fast, then step down
             ratio = min(max_w / max(w, 1), max_h / max(h, 1))
             nxt = int(size * ratio) if ratio < 1 else size - 4
-            size = min(nxt, size - 1)
-        return self.font(role, minimum)
+            size = max(minimum, min(nxt, size - 1))

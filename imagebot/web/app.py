@@ -6,6 +6,7 @@ account's @username.
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import time
@@ -32,6 +33,11 @@ ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_STYLE = all_styles()[0].key
 
 
+def _runid() -> str:
+    """Unique per request — a double-click or two tabs can't overwrite files."""
+    return time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
+
+
 def _resolve_mode(data: dict) -> str:
     """The concrete mode for a request. 'auto' (stale client / race) is resolved
     from whichever content the payload actually carries."""
@@ -56,6 +62,13 @@ _KEY_FIELDS = {
 }
 
 
+def _env_line(key: str, value: str) -> str:
+    """A KEY="value" line that round-trips through python-dotenv unchanged
+    (raw '#', spaces, quotes or ${...} would otherwise corrupt on reload)."""
+    v = (value or "").replace("\\", "\\\\").replace('"', '\\"')
+    return f'{key}="{v}"'
+
+
 def _update_env_file(path: Path, updates: dict) -> None:
     """Upsert KEY=VALUE lines in .env, preserving everything else."""
     path = Path(path)
@@ -64,13 +77,13 @@ def _update_env_file(path: Path, updates: dict) -> None:
     for ln in lines:
         m = re.match(r"\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=", ln)
         if m and m.group(1) in updates:
-            out.append(f"{m.group(1)}={updates[m.group(1)]}")
+            out.append(_env_line(m.group(1), updates[m.group(1)]))
             seen.add(m.group(1))
         else:
             out.append(ln)
     for k, v in updates.items():
         if k not in seen:
-            out.append(f"{k}={v}")
+            out.append(_env_line(k, v))
     path.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
 
 
@@ -170,6 +183,19 @@ def create_app(settings=None) -> Flask:
         rd = rl.to_dict()
         rd["entries"] = [with_art(e) for e in rd.get("entries", [])]
         rd["logo_url"] = file_url(rd["logo_path"]) if rd.get("logo_path") else ""
+        if rd.get("logo_path") and not rd["logo_url"] and Path(rd["logo_path"]).exists():
+            # a logo outside output/cache still renders on the card — copy it into
+            # the cache so the editor preview matches the export
+            try:
+                import shutil
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                dest = CACHE_DIR / f"logo_{uuid.uuid4().hex[:8]}{Path(rd['logo_path']).suffix or '.png'}"
+                shutil.copy(rd["logo_path"], dest)
+                rd["logo_path"] = str(dest)
+                rl.logo_path = str(dest)
+                rd["logo_url"] = file_url(str(dest))
+            except Exception:
+                pass
         return {
             "ok": True, "mode": "ranking", "runid": runid, "provider_used": provider_used,
             "ranking": rd, "styles": rank_templates(),
@@ -203,7 +229,7 @@ def create_app(settings=None) -> Flask:
         if not news:
             return jsonify(ok=False, error="Please paste some news text."), 400
         opts = _opts_from(data)
-        runid = time.strftime("%Y%m%d-%H%M%S")
+        runid = _runid()
         log: list[str] = []
         if data.get("mode") == "auto":
             ap = prepare_auto(settings, opts, news, progress=log.append)
@@ -224,7 +250,6 @@ def create_app(settings=None) -> Flask:
             payload["auto"] = ap["why"]
             return jsonify(payload)
         if data.get("mode") == "ranking":
-            opts.find_art = _bool(data.get("find_art"), True)
             prep = prepare_ranking(settings, opts, news, progress=log.append)
             if not prep["ranking"].entries:
                 return jsonify(ok=False, error="Couldn't read any list entries."), 400
@@ -252,7 +277,7 @@ def create_app(settings=None) -> Flask:
     def render():
         data = request.get_json(silent=True) or {}
         opts = _opts_from(data)
-        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        runid = data.get("runid") or _runid()
         log: list[str] = []
         rmode = _resolve_mode(data)
         if rmode == "ranking":
@@ -283,7 +308,7 @@ def create_app(settings=None) -> Flask:
     @app.post("/render_one")
     def render_one_route():
         data = request.get_json(silent=True) or {}
-        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        runid = data.get("runid") or _runid()
         opts = _opts_from(data)
         rmode = _resolve_mode(data)
         if rmode == "ranking":
@@ -315,7 +340,7 @@ def create_app(settings=None) -> Flask:
     def carousel():
         data = request.get_json(silent=True) or {}
         panels = [Panel.from_dict(p) for p in data.get("panels", []) if p.get("title")]
-        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        runid = data.get("runid") or _runid()
         style_key = data.get("style") or DEFAULT_STYLE
         if not panels:
             return jsonify(ok=False, error="No panels."), 400
@@ -328,7 +353,7 @@ def create_app(settings=None) -> Flask:
     def export_all_route():
         data = request.get_json(silent=True) or {}
         opts = _opts_from(data)
-        runid = data.get("runid") or time.strftime("%Y%m%d-%H%M%S")
+        runid = data.get("runid") or _runid()
         mode = _resolve_mode(data)
         kw = {}
         if mode == "news":
@@ -359,10 +384,16 @@ def create_app(settings=None) -> Flask:
         ext = Path(f.filename).suffix.lower()
         if ext not in ALLOWED_IMG_EXT:
             return jsonify(ok=False, error="Use PNG/JPG/WEBP."), 400
+        data_bytes = f.read()
+        try:
+            from PIL import Image as _PILImage
+            _PILImage.open(io.BytesIO(data_bytes)).verify()
+        except Exception:
+            return jsonify(ok=False, error="That file isn't a readable image."), 400
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         name = f"upload_{uuid.uuid4().hex[:12]}{ext}"
         dest = CACHE_DIR / name
-        f.save(dest)
+        dest.write_bytes(data_bytes)
         return jsonify(ok=True, image_path=str(dest), url=file_url(str(dest)))
 
     @app.post("/upload_logo")

@@ -86,14 +86,8 @@ button:disabled{opacity:.5;cursor:wait}
 button.small{width:auto;padding:9px 14px}
 .checks small{color:var(--muted)}
 
-/* gallery */
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:8px}
-.tile{padding:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;
-  display:flex;flex-direction:column;text-align:left}
-.tile img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#000}
-.tile span{padding:8px 10px;font-size:.8rem;font-weight:600;color:var(--text)}
-.tile:hover{border-color:var(--accent)}
-.tile.active{outline:2px solid var(--accent);border-color:var(--accent)}
+/* keyboard affordance */
+:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
 
 /* selected */
 .sel-actions{display:flex;align-items:center;gap:14px}
@@ -101,9 +95,13 @@ button.small{width:auto;padding:9px 14px}
 .sel-card{flex:0 1 320px}
 .sel-card img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
 .sel-card .dl{display:inline-block;margin-top:7px;font-size:.85rem}
+.sel-card .copy-img{margin-left:10px;padding:4px 10px}
+
+/* restore-last-run offer inside the empty state */
+.restore-wrap{margin-top:14px;display:flex;gap:8px;justify-content:center}
 
 /* mode toggle */
-.mode-toggle{display:flex;gap:14px}
+.mode-toggle{display:flex;gap:14px;flex-wrap:wrap}
 .mode-toggle label{display:flex;align-items:center;gap:6px;color:var(--text);font-size:.85rem}
 .mode-toggle input{width:auto;margin:0}
 #news-fields .opts{margin-top:12px}

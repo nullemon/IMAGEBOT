@@ -19,115 +19,126 @@ from dataclasses import dataclass, field
 
 from .models import Panel, NewsPost, RankingList
 from .news_parser import (parse_news, parse_news_post, parse_ranking,
-                          _extract_date, _item_lines_for_autopilot)
+                          _extract_date, _has_month_date, _item_lines_for_autopilot)
 from .providers import get_text_provider
 
 RANK_MAX = 20
 
 
 # --------------------------------------------------------------------------
-# event taxonomy:  keyword → (event, confirmed verb, tentative verb, tag, accent)
-# Order matters — the first keyword found in the text wins, so the most
-# specific phrases come first.
+# event taxonomy:  pattern → (event, confirmed verb, tentative verb, tag, accent)
+# Order matters — the first pattern found in the text wins, so the most
+# specific phrases come first. All patterns are word-boundary-aware, so
+# 'cast' never fires inside "Castle"/"broadcast", 'game' never inside
+# "endgame", 'record' never inside "recorded", and "ends."/"wins!" still hit.
 # --------------------------------------------------------------------------
 EV = namedtuple("EV", "key verb verb_t tag accent")
 
-_EVENTS: list[tuple[str, EV]] = [
+
+def _erx(pattern: str) -> re.Pattern:
+    return re.compile(r"(?<![a-z])(?:" + pattern + r")(?![a-z])")
+
+
+_EVENTS: list[tuple[re.Pattern, EV]] = [(_erx(p), ev) for p, ev in [
     # --- specific multi-word phrases first (they win over the generic words) ---
-    ("final season", EV("finale", "ENDING", "ENDING", "FINAL SEASON", "#ff4d5e")),
-    ("new chapter",  EV("manga", "RETURNS", "RETURNING", "MANGA", "#48d08a")),
-    ("release date", EV("release", "RELEASED", "RELEASING", "RELEASE DATE", "#48d08a")),
-    ("box office",   EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
-    ("highest-gross", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
-    ("highest gross", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
-    ("billion yen",  EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
-    ("anime of the year", EV("award", "WINS", "WINNING", "ANIME OF THE YEAR", "#ffd23f")),
-    (" wins ",       EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
-    ("award",        EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
-    ("voice actor",  EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
-    ("voice cast",   EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
-    ("seiyuu",       EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
-    ("cast as",      EV("casting", "CAST", "CASTING", "CASTING", "#5b8cff")),
-    ("joins the cast", EV("casting", "JOINS", "JOINING", "CASTING", "#5b8cff")),
-    ("anniversary",  EV("anniversary", "CELEBRATES", "CELEBRATING", "ANNIVERSARY", "#ffd23f")),
-    ("english dub",  EV("dub", "DUBBED", "DUBBING", "ENGLISH DUB", "#3fa7ff")),
-    ("live action",  EV("live_action", "CONFIRMED", "RUMORED", "LIVE ACTION", "#b07cff")),
-    ("live-action",  EV("live_action", "CONFIRMED", "RUMORED", "LIVE ACTION", "#b07cff")),
-    ("anime adaptation", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
-    ("gets an anime", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
-    ("gets anime",   EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
-    ("spin-off",     EV("spinoff", "ANNOUNCED", "RUMORED", "SPIN-OFF", "#5b8cff")),
-    ("spinoff",      EV("spinoff", "ANNOUNCED", "RUMORED", "SPIN-OFF", "#5b8cff")),
-    ("sequel",       EV("sequel", "CONFIRMED", "RUMORED", "SEQUEL", "#3fa7ff")),
-    ("crossover",    EV("collab", "REVEALED", "RUMORED", "CROSSOVER", "#ff39a8")),
-    ("most watched", EV("record", "TOPS CHARTS", "NEARING", "RECORD", "#19c37d")),
-    ("breaks record", EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
-    ("record",       EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
-    ("comes back",   EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
-    ("come back",    EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
-    ("return",       EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
-    ("resume",       EV("returns", "RESUMES", "RESUMING", "RETURNS", "#f5a623")),
-    ("continues",    EV("returns", "CONTINUES", "CONTINUING", "RETURNS", "#f5a623")),
-    ("postpone",     EV("delay", "DELAYED", "DELAYED", "DELAYED", "#ff8a3c")),
-    ("delay",        EV("delay", "DELAYED", "DELAYED", "DELAYED", "#ff8a3c")),
-    ("hiatus",       EV("hiatus", "ON HIATUS", "ON HIATUS", "HIATUS", "#ff8a3c")),
-    ("cancel",       EV("cancel", "CANCELLED", "CANCELLED", "CANCELLED", "#ff4d5e")),
-    ("trailer",      EV("trailer", "REVEALED", "TEASED", "NEW PV", "#5b8cff")),
-    ("teaser",       EV("trailer", "TEASED", "TEASED", "NEW PV", "#5b8cff")),
-    (" pv",          EV("trailer", "REVEALED", "TEASED", "NEW PV", "#5b8cff")),
-    ("key visual",   EV("visual", "REVEALED", "TEASED", "KEY VISUAL", "#5b8cff")),
-    ("premiere",     EV("premiere", "PREMIERES", "PREMIERING", "NEW SEASON", "#3fa7ff")),
-    ("debut",        EV("premiere", "DEBUTS", "DEBUTING", "NEW SEASON", "#3fa7ff")),
-    ("airs",         EV("premiere", "PREMIERES", "PREMIERING", "NEW SEASON", "#3fa7ff")),
-    ("movie",        EV("movie", "CONFIRMED", "RUMORED", "MOVIE", "#b07cff")),
-    ("film",         EV("movie", "CONFIRMED", "RUMORED", "MOVIE", "#b07cff")),
-    (" ova",         EV("movie", "ANNOUNCED", "RUMORED", "OVA", "#b07cff")),
-    ("ending",       EV("finale", "ENDING", "ENDING", "FINALE", "#ff4d5e")),
-    ("ends ",        EV("finale", "ENDS", "ENDING", "FINALE", "#ff4d5e")),
-    ("concludes",    EV("finale", "ENDS", "ENDING", "FINALE", "#ff4d5e")),
-    ("final arc",    EV("finale", "ENDING", "ENDING", "FINAL ARC", "#ff4d5e")),
-    ("season",       EV("new_season", "RETURNS", "RETURNING", "NEW SEASON", "#3fa7ff")),
-    ("new arc",      EV("new_season", "RETURNS", "RETURNING", "NEW ARC", "#3fa7ff")),
-    ("game",         EV("game", "ANNOUNCED", "RUMORED", "GAME", "#19c37d")),
-    ("collab",       EV("collab", "REVEALED", "RUMORED", "COLLAB", "#ff39a8")),
-    ("cast",         EV("casting", "REVEALED", "RUMORED", "CASTING", "#5b8cff")),
-    ("leak",         EV("leak", "LEAKED", "LEAKED", "LEAK", "#b07cff")),
-    ("confirm",      EV("confirm", "CONFIRMED", "RUMORED", "CONFIRMED", "#48d08a")),
-    ("announce",     EV("announce", "ANNOUNCED", "RUMORED", "NEW SERIES", "#f5a623")),
-    ("reveal",       EV("announce", "REVEALED", "TEASED", "REVEALED", "#f5a623")),
-    ("ongoing",      EV("ongoing", "RETURNS", "RETURNING", "ONGOING", "#f5a623")),
-]
+    (r"final\s+season", EV("finale", "ENDING", "ENDING", "FINAL SEASON", "#ff4d5e")),
+    (r"new\s+chapters?", EV("manga", "RETURNS", "RETURNING", "MANGA", "#48d08a")),
+    (r"release\s+dates?", EV("release", "RELEASED", "RELEASING", "RELEASE DATE", "#48d08a")),
+    (r"box\s+office", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    (r"highest[\s-]gross\w*", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    (r"billion\s+yen", EV("box_office", "SMASHES", "SMASHING", "BOX OFFICE", "#19c37d")),
+    (r"anime\s+of\s+the\s+year", EV("award", "WINS", "WINNING", "ANIME OF THE YEAR", "#ffd23f")),
+    (r"wins", EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
+    (r"awards?", EV("award", "WINS", "WINNING", "AWARD", "#ffd23f")),
+    (r"voice\s+actors?", EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    (r"voice\s+cast", EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    (r"seiyuu", EV("casting", "CAST", "CASTING", "VOICE CAST", "#5b8cff")),
+    (r"cast\s+as", EV("casting", "CAST", "CASTING", "CASTING", "#5b8cff")),
+    (r"joins\s+the\s+cast", EV("casting", "JOINS", "JOINING", "CASTING", "#5b8cff")),
+    (r"anniversar(?:y|ies)", EV("anniversary", "CELEBRATES", "CELEBRATING", "ANNIVERSARY", "#ffd23f")),
+    (r"english\s+dub(?:bed)?", EV("dub", "DUBBED", "DUBBING", "ENGLISH DUB", "#3fa7ff")),
+    (r"live[\s-]action", EV("live_action", "CONFIRMED", "RUMORED", "LIVE ACTION", "#b07cff")),
+    (r"anime\s+adaptation", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
+    (r"gets?\s+(?:an\s+)?anime", EV("adaptation", "GETS ANIME", "RUMORED", "ANIME ADAPTATION", "#f5a623")),
+    (r"spin[\s-]?offs?", EV("spinoff", "ANNOUNCED", "RUMORED", "SPIN-OFF", "#5b8cff")),
+    (r"sequels?", EV("sequel", "CONFIRMED", "RUMORED", "SEQUEL", "#3fa7ff")),
+    (r"crossovers?", EV("collab", "REVEALED", "RUMORED", "CROSSOVER", "#ff39a8")),
+    (r"most[\s-]watched", EV("record", "TOPS CHARTS", "NEARING", "RECORD", "#19c37d")),
+    (r"break(?:s|ing)?\s+(?:the\s+)?records?", EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
+    (r"records?", EV("record", "BREAKS RECORDS", "NEARING", "RECORD", "#19c37d")),
+    (r"comes?\s+back", EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
+    (r"return(?:s|ed|ing)?", EV("returns", "RETURNS", "RETURNING", "RETURNS", "#f5a623")),
+    (r"resum(?:es?|ed|ing)", EV("returns", "RESUMES", "RESUMING", "RETURNS", "#f5a623")),
+    (r"continu(?:es|ed|ing)", EV("returns", "CONTINUES", "CONTINUING", "RETURNS", "#f5a623")),
+    (r"postpon(?:es?|ed|ing)", EV("delay", "DELAYED", "DELAYED", "DELAYED", "#ff8a3c")),
+    (r"delay(?:s|ed|ing)?", EV("delay", "DELAYED", "DELAYED", "DELAYED", "#ff8a3c")),
+    (r"hiatus", EV("hiatus", "ON HIATUS", "ON HIATUS", "HIATUS", "#ff8a3c")),
+    (r"cancel(?:s|l?ed|ling|lation)?", EV("cancel", "CANCELLED", "CANCELLED", "CANCELLED", "#ff4d5e")),
+    (r"trailers?", EV("trailer", "REVEALED", "TEASED", "NEW PV", "#5b8cff")),
+    (r"teas(?:ers?|ed|ing)", EV("trailer", "TEASED", "TEASED", "NEW PV", "#5b8cff")),
+    (r"pv", EV("trailer", "REVEALED", "TEASED", "NEW PV", "#5b8cff")),
+    (r"key\s+visuals?", EV("visual", "REVEALED", "TEASED", "KEY VISUAL", "#5b8cff")),
+    (r"premier(?:es?|ed|ing)", EV("premiere", "PREMIERES", "PREMIERING", "NEW SEASON", "#3fa7ff")),
+    (r"debut(?:s|ed|ing)?", EV("premiere", "DEBUTS", "DEBUTING", "NEW SEASON", "#3fa7ff")),
+    (r"air(?:s|ed|ing)", EV("premiere", "PREMIERES", "PREMIERING", "NEW SEASON", "#3fa7ff")),
+    (r"movies?", EV("movie", "CONFIRMED", "RUMORED", "MOVIE", "#b07cff")),
+    (r"films?", EV("movie", "CONFIRMED", "RUMORED", "MOVIE", "#b07cff")),
+    (r"ovas?", EV("movie", "ANNOUNCED", "RUMORED", "OVA", "#b07cff")),
+    (r"ending", EV("finale", "ENDING", "ENDING", "FINALE", "#ff4d5e")),
+    (r"ends", EV("finale", "ENDS", "ENDING", "FINALE", "#ff4d5e")),
+    (r"conclud(?:es|ed|ing)", EV("finale", "ENDS", "ENDING", "FINALE", "#ff4d5e")),
+    (r"final\s+arc", EV("finale", "ENDING", "ENDING", "FINAL ARC", "#ff4d5e")),
+    (r"seasons?", EV("new_season", "RETURNS", "RETURNING", "NEW SEASON", "#3fa7ff")),
+    (r"new\s+arcs?", EV("new_season", "RETURNS", "RETURNING", "NEW ARC", "#3fa7ff")),
+    (r"games?", EV("game", "ANNOUNCED", "RUMORED", "GAME", "#19c37d")),
+    (r"collab(?:s|oration|orations|orating)?", EV("collab", "REVEALED", "RUMORED", "COLLAB", "#ff39a8")),
+    (r"cast(?:ing)?", EV("casting", "REVEALED", "RUMORED", "CASTING", "#5b8cff")),
+    (r"leak(?:s|ed|ing)?", EV("leak", "LEAKED", "LEAKED", "LEAK", "#b07cff")),
+    (r"confirm(?:s|ed|ing|ation)?", EV("confirm", "CONFIRMED", "RUMORED", "CONFIRMED", "#48d08a")),
+    (r"announc(?:es?|ed|ing|ements?)", EV("announce", "ANNOUNCED", "RUMORED", "NEW SERIES", "#f5a623")),
+    (r"reveal(?:s|ed|ing)?", EV("announce", "REVEALED", "TEASED", "REVEALED", "#f5a623")),
+    (r"ongoing", EV("ongoing", "RETURNS", "RETURNING", "ONGOING", "#f5a623")),
+]]
 _GENERIC = EV("news", "ANNOUNCED", "RUMORED", "NEWS", "#f5a623")
 _VERBY = {"returns", "release", "premiere", "new_season", "movie", "finale", "delay",
           "hiatus", "cancel", "leak", "manga", "confirm", "announce", "trailer",
           "visual", "game", "collab", "casting", "ongoing", "box_office", "award",
           "anniversary", "dub", "live_action", "adaptation", "spinoff", "sequel", "record"}
 
-_TENTATIVE = ("leak", "rumor", "rumour", "reportedly", "unconfirmed", "not yet official",
-              "not official", "alleged", "supposedly", "might ", "could ", "possibly",
-              "speculat", "teased", "hinted")
+_TENTATIVE_RX = re.compile(
+    r"(?<![a-z])(?:leak(?:s|ed|ing)?|rumou?r(?:s|ed)?|reportedly|unconfirmed|"
+    r"not\s+(?:yet\s+)?official|alleged(?:ly)?|supposedly|might|could|possibly|"
+    r"speculat\w*|teased|hinted)(?![a-z])")
 
 
 # --------------------------------------------------------------------------
 def _event_of(text: str) -> tuple[EV, bool]:
-    low = " " + (text or "").lower() + " "
-    tentative = any(m in low for m in _TENTATIVE)
-    for kw, ev in _EVENTS:
-        if kw in low:
+    low = (text or "").lower()
+    tentative = bool(_TENTATIVE_RX.search(low))
+    for rx, ev in _EVENTS:
+        if rx.search(low):
             return ev, tentative
     return _GENERIC, tentative
 
 
 def _is_cjk(s: str) -> bool:
-    return any(0x3000 <= ord(c) <= 0x9FFF or 0xFF00 <= ord(c) <= 0xFFEF for c in (s or ""))
+    for c in s or "":
+        o = ord(c)
+        if (0x3000 <= o <= 0x9FFF or 0xFF00 <= o <= 0xFFEF or
+                0xAC00 <= o <= 0xD7AF or 0x1100 <= o <= 0x11FF):   # + Hangul
+            return True
+    return False
 
 
 def _badges(text: str, tentative: bool) -> list:
     if not tentative:
         return []
-    low = text.lower()
-    first = "RUMOR" if ("rumor" in low or "rumour" in low) else "LEAK"
-    return [first, "UNCONFIRMED"]
+    low = (text or "").lower()
+    if "leak" in low:
+        return ["LEAK", "UNCONFIRMED"]
+    if "rumor" in low or "rumour" in low:
+        return ["RUMOR", "UNCONFIRMED"]
+    return ["UNCONFIRMED"]
 
 
 def _subtitle(ev: EV, text: str, date: str, tentative: bool) -> str:
@@ -149,19 +160,66 @@ def _subtitle(ev: EV, text: str, date: str, tentative: bool) -> str:
     return ev.tag.title()
 
 
+_TRAIL_RE = re.compile(
+    r"(?i)[\s\-–—:,|]*\b(?:is|are|was|were|has|have|had|be|been|being|get|gets|"
+    r"getting|got|will|would|to|on|in|at|for|of|and|the|a|an|its|it's|just|now|"
+    r"not|yet|official|officially|finally|reportedly|soon)$")
+
+
+def _strip_trailing(s: str) -> str:
+    s = s.strip(" -–—:,|\t")
+    prev = None
+    while prev != s:                     # loop to a fixpoint: "is getting a" all goes
+        prev = s
+        s = _TRAIL_RE.sub("", s).strip(" -–—:,|\t")
+    return s
+
+
+def _title_dirty_cut(t: str):
+    """Where dangling verb-dirt starts in a title ('… returns on'), or None.
+    A keyword is dirt only when nothing but stopwords follow it — so it stays
+    put in real titles like "New Game!" / "The Return of the Shield Hero"."""
+    low = t.lower()
+    best = None
+    for rx, _ in _EVENTS:
+        for m in rx.finditer(low):
+            if m.start() <= 1:
+                continue
+            if not _strip_trailing(t[m.end():]):
+                best = m.start() if best is None else min(best, m.start())
+    return best
+
+
+def _dedirt_title(t: str) -> str:
+    prev = None
+    while t and prev != t:
+        prev = t
+        cutp = _title_dirty_cut(t)
+        if cutp is not None:
+            t = _strip_trailing(t[:cutp])
+    return t
+
+
 def _clean_series(title: str, line: str) -> str:
-    """The series-name pill text = the bit of the line before the action verb."""
-    src = line or title
+    """The series-name pill text: the part of the line before the action verb.
+    The known title is de-dirted first, then keyword hits INSIDE it are ignored,
+    so "New Game!" survives while "Hunter x Hunter returns on" gets trimmed."""
+    src = (line or title or "").strip()
+    if not src:
+        return (title or "").strip()
+    tl = _dedirt_title((title or "").strip())
     low = src.lower()
+    ti = low.find(tl.lower()) if tl else -1
+    protected_end = (ti + len(tl)) if ti >= 0 else 0
     cut = len(src)
-    for kw, _ in _EVENTS:
-        i = low.find(kw)
-        if i > 1:
-            cut = min(cut, i)
-    cand = src[:cut] if cut < len(src) else (title or src)
-    cand = re.sub(r"(?i)\s+(is|are|has|have|had|gets?|to|on|will|now|just|the|a|an|in|for|of|and|—|-|:|\|)\s*$",
-                  "", cand.strip(" -–—:,|"))
-    return cand.strip(" -–—:,|") or (title or src).strip()
+    for rx, _ in _EVENTS:
+        for m in rx.finditer(low):
+            if m.start() <= 1 or (ti >= 0 and m.start() < protected_end):
+                continue                 # line starts with it / it's part of the title
+            cut = min(cut, m.start())
+            break
+    cand = _strip_trailing(src[:cut]) if cut < len(src) else _strip_trailing(tl or src)
+    return cand or tl or (title or src).strip()
 
 
 def enrich_panel(panel: Panel, line: str) -> str:
@@ -200,8 +258,8 @@ _NUM_LINE = re.compile(r"^\s*#?\s*\d{1,2}\s*[\.\)]\s+\S")
 
 
 def _has_event_kw(line: str) -> bool:
-    low = " " + line.lower() + " "
-    return any(kw in low for kw in (k for k, _ in _EVENTS))
+    low = line.lower()
+    return any(rx.search(low) for rx, _ in _EVENTS)
 
 
 # Flip to True to ALWAYS ask the AI router (every paste), even on unambiguous
@@ -239,7 +297,8 @@ def _route_confident(text: str) -> tuple[str, bool]:
     if len(numbered) >= 3:
         if ranking_words or has_items_label:
             return "ranking", True
-        verby = sum(1 for l in numbered if _has_event_kw(l) or _extract_date(l) or "|" in l)
+        # month-based dates only — a bare year like "(2023)" is common in rankings
+        verby = sum(1 for l in numbered if _has_event_kw(l) or _has_month_date(l) or "|" in l)
         if verby >= max(2, (len(numbered) + 1) // 2):
             return "lineup", True
         return "ranking", True
@@ -264,17 +323,32 @@ def route(text: str) -> str:
 
 
 def _match_line(panel: Panel, lines: list, used: set):
-    """Find the source line this panel came from (title is a substring of it)."""
-    title = (panel.title or "").strip().lower()
-    if title:
-        for i, ln in enumerate(lines):
-            if i in used:
-                continue
-            low = ln.lower()
-            if title in low or (len(title) > 4 and title[: max(4, len(title) // 2)] in low):
-                used.add(i)
-                return ln
-    return None
+    """Find the source line this panel came from. Scores every candidate and
+    picks the best (exact word-boundary containment beats a prefix guess), so
+    'Attack on Titan' no longer steals 'Attack on Titan: Junior High' lines."""
+    tl = (panel.title or "").strip().lower()
+    if not tl:
+        return None
+    rx = re.compile(r"(?<![a-z0-9])" + re.escape(tl) + r"(?![a-z0-9])")
+    best_i, best_score = None, 0
+    for i, ln in enumerate(lines):
+        if i in used:
+            continue
+        low = ln.lower()
+        m = rx.search(low)
+        score = 0
+        if m:
+            score = 100
+            if low[m.end():m.end() + 1] in (":", "-", "–", "—"):
+                score -= 40              # likely a longer, different title
+        elif len(tl) >= 8 and tl[:8] in low:
+            score = 10
+        if score > best_score:
+            best_i, best_score = i, score
+    if best_i is None:
+        return None
+    used.add(best_i)
+    return lines[best_i]
 
 
 def _split_items(text: str) -> list:
@@ -403,12 +477,14 @@ def auto_design(text: str, settings, opts=None, provider=None, progress=None) ->
                             default_tag_sub=settings.brand.default_tag_sub)
         lines = _item_lines_for_autopilot(text)
         used = set()
+        # match longest titles first so "X: Junior High" claims its line before "X"
+        srcs: list = [None] * len(panels)
+        for i in sorted(range(len(panels)), key=lambda j: -len(panels[j].title or "")):
+            srcs[i] = _match_line(panels[i], lines, used)
         keys = []
         for i, p in enumerate(panels):
-            src = _match_line(p, lines, used)
-            if src is None:
-                src = lines[i] if i < len(lines) else ""
-            keys.append(enrich_panel(p, (src + " " + p.title).strip()))
+            src = srcs[i] if srcs[i] is not None else (lines[i] if i < len(lines) else "")
+            keys.append(enrich_panel(p, src))
         style = _pick_lineup_style(panels, keys)
         verbs = ", ".join(dict.fromkeys(p.verb for p in panels if p.verb)) or "updates"
         look = "verb-forward" if style == "returns" else "art-forward"
